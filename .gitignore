@@ -133,3 +133,8 @@ dmypy.json
 *.png
 *.jpg
 *.pdf
+*.aux
+*.fdb_latexmk
+*.fls
+*.out
+*.gz
