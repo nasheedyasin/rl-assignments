@@ -126,7 +126,7 @@ The following are properties of the environment that ensure valid behavior from 
         \textit{execution replicability} accross devices.
     \item The action space, reward space, action mode space, goal and initial agent position
         are defined using Gym's spaces API. All were initialized in a way that the use the same
-        PRNG which ensures end to en replicability.
+        PRNG which ensures end to end replicability.
     \item The result of any action (left, right, top, down) are clipped to the min and max
         values of 0 and \verb|GridSize| (6 in our case) respectively, ensuring that the
         agent never leaves the environment.
