@@ -83,7 +83,7 @@ There are certain features that are common to both the stocastic and determinist
     \begin{center}
         \includegraphics[scale=0.50]{vis.png}
     \end{center}
-    \caption{Environment visualizations accross two seperate episodes}
+    \caption{Environment visualizations}
 \end{figure}
 
 
@@ -100,18 +100,18 @@ can be described as follows:
         expected (\verb|as-is|), a $2/9^{th}$ chance that it is the \verb|double| of what 
         is expected and a $1/9^{th}$ chance of it being a \verb|mirror| action.
     \item The reward (and negative reward) for each state is distributed in a reciprocal
-        fashion. i.e. $1/9^{th}$ the reward for coming through the \verb|as-is| action,
-        $2/9^{th}$ reward when coming via the \verb|double| action and $2/3^{rd}$ reward when
+        proportions. i.e. \verb|1x| the reward for coming through the \verb|as-is| action,
+        \verb|2x| reward when coming via the \verb|double| action and \verb|6x| reward when
         coming via a \verb|mirror| action.
     \item For instance on a 5x5 grid where the reward on each square is 1 (for simplicity):
     \newline
     If $s_0$ \verb|=(2,3)| and $a$ \verb|= RIGHT|:
         \begin{itemize}
-            \item $2/3^{rd}$ chance $s_1$ \verb|=(2,4)| and $r$ \verb|=1/9|
-            \item $2/9^{th}$ chance $s_1$ \verb|=(2,5)| and $r$ \verb|=2/9|
-            \item $1/9^{th}$ chance $s_1$ \verb|=(3,2)| and $r$ \verb|=2/3|
+            \item $2/3^{rd}$ chance $s_1$ \verb|=(2,4)| and $r$ \verb|=1|
+            \item $2/9^{th}$ chance $s_1$ \verb|=(2,5)| and $r$ \verb|=2|
+            \item $1/9^{th}$ chance $s_1$ \verb|=(3,2)| and $r$ \verb|=6|
         \end{itemize}
-    \item Exception: Landing on the \verb|goal| state will always yield a maximal reward
+    \item Exception: Landing on the \verb|goal| state will always yield a \verb|1x| reward
         (of 1 for the above example) regardless of how the agent got there.
 \end{itemize}
 
