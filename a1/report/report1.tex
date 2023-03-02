@@ -8,7 +8,11 @@
 \addbibresource{refs.bib}
 
 
-\title{CSE 546 Assignment 1 -- Part 1: Environments}
+\usepackage[inline]{enumitem}
+\usepackage{booktabs}
+\usepackage{multirow}
+
+\title{CSE 546 Assignment 1}
 
 
 \author{
@@ -38,9 +42,10 @@
 \maketitle
 
 \begin{abstract}
-    This report explains my experiments with environments in RL.
+    This report explains our experiments with environments in RL.
     It focuses on the differences between stochastic and deterministic environments,
-    and introduces commonly used rendering methodologies.
+    and introduces commonly used rendering methodologies. We also go on to solve these
+    environments with popular RL tabular methods: Q and Double Q Learning.
 \end{abstract}
 
 \section{The Environments}
@@ -50,34 +55,42 @@ There are certain features that are common to both the stocastic and determinist
 \subsection*{Environmental Elements}
 \begin{figure}[h]
     \begin{center}
-        \includegraphics[scale=0.50]{elements.png}
+        \includegraphics[width=\textwidth]{elements.png}
     \end{center}
+    \label{fig:elements}
     \caption{Environmental elements (from left to right; top to bottom) Agent, Goal,
         Negative Reward, Reward}
 \end{figure}
 
-\begin{enumerate}
-    \item The enivironment is a \verb|6x6| grid. With \verb|36| possible states. The goal is
-        to reach the oasis shown in picture 1 with the maximal reward within a 
-        (configurable) number of time steps.
-    \item The agent randomly (uniformly) takes one of four possible actions:
-    \begin{itemize}
-        \item Left
-        \item Right
-        \item Up
-        \item Down
-    \end{itemize}
-    \item The reward space is continous with values ranging from -0.5 to 0.5. The terminal/goal state
-        has a reward of 1 and the initial state has a reward of 0.
-    \item Every state has a reward associated to it and the size of the 
-        cactus/lemonade is indicative of the reward.
-    \item Landing on a square causes the reward on that square to be consumed.
-        i.e. landing on the same square again will yield no reward (0 reward).
-    \item The rewards and negative rewards are spread randomly accross the grid on
-        initialization.
-    \item Resetting the environment will not change the location or distribution of the rewards
-        and goal state. It only alters the initial state of the agent.
-\end{enumerate}
+The enivironment is a \verb|6x6| grid. With \verb|36| possible positions that the agent can
+occupy. The goal is to reach the oasis (shown in Figure \ref{fig:elements}) \textbf{after
+consuming all} the juice (positive reward) within a (configurable) maximum number of time
+steps. If the agent lands on a juice tile it is awarded +0.99 and the cactus (negative
+reward) leads to a -1.0 reward. Once all the juice is consumed, the agent must proceed to the
+oasis to earn a reward of +1.0
+The states in this enviroment are a \textbf{combination} of the agent's position and the
+current rewards (positive, negative and goal) available on the grid. The Formula \ref{eqn:num-states}
+gives us the number of possible states for the agent.
+
+\begin{equation}
+    num_{states}=num_{pos} \sum_{k=0}^{c_{reward}} {c_{reward}\choose k}
+    \label{eqn:num-states}
+\end{equation}
+
+Here $num_{pos}$ refers to the number of grid squares, \verb|36| in our case. $c_{reward}$
+refers to the number of positive rewards + the number of negative rewards + 1 (for the goal
+state). We have \verb|6| negative rewards, \verb|3| positive rewards and one goal. Hence, 
+the $num_{states}$ for us is \verb|36864|.
+
+In each position our agent can take 4 potential actions:
+\begin{enumerate*}
+    \item Left
+    \item Right
+    \item Up
+    \item Down.
+\end{enumerate*}
+Resetting the environment will not change the location or distribution of the rewards and
+goal state. It only alters the initial state of the agent.
 
 \begin{figure}[h]
     \begin{center}
@@ -93,47 +106,45 @@ An enviroment is called stocastic when the result of an action (i.e. its success
 reward) is not guaranteed. Formally, given the same state $s_0$ and action $a$ the next state
 $s_1$ and reward $r$ will be probability distributions.
 
-In the \verb|GridEnviroment| defined in this report, stocasticity stems is the stocasticity
-can be described as follows:
+In our \verb|GridEnviroment| the stocasticity can be described as follows:
 \begin{itemize}
     \item For every action there is a $2/3^{rd}$ chance that the action is performed as
         expected (\verb|as-is|), a $2/9^{th}$ chance that it is the \verb|double| of what 
         is expected and a $1/9^{th}$ chance of it being a \verb|mirror| action.
-    \item The reward (and negative reward) for each state is distributed in a reciprocal
-        proportions. i.e. \verb|1x| the reward for coming through the \verb|as-is| action,
-        \verb|2x| reward when coming via the \verb|double| action and \verb|6x| reward when
-        coming via a \verb|mirror| action.
-    \item For instance on a 5x5 grid where the reward on each square is 1 (for simplicity):
+    \item A bonus is distributed in a reciprocal proportions. i.e. \verb|0.1x| the
+        \verb|max_reward| for coming through the \verb|as-is| action, \verb|0.2x| \verb|max_reward|
+        for coming via the \verb|double| action and \verb|0.3x| \verb|max_reward| for the
+        \verb|mirror| action.
+    \item For instance on a 6x6 grid where the reward on each square is 1 (for simplicity):
     \newline
     If $s_0$ \verb|=(2,3)| and $a$ \verb|= RIGHT|:
         \begin{itemize}
-            \item $2/3^{rd}$ chance $s_1$ \verb|=(2,4)| and $r$ \verb|=1|
-            \item $2/9^{th}$ chance $s_1$ \verb|=(2,5)| and $r$ \verb|=2|
-            \item $1/9^{th}$ chance $s_1$ \verb|=(3,2)| and $r$ \verb|=6|
+            \item $2/3^{rd}$ chance $s_1$ \verb|=(2,4)| and $r$ \verb|=1+0.1|
+            \item $2/9^{th}$ chance $s_1$ \verb|=(2,5)| and $r$ \verb|=1+0.2|
+            \item $1/9^{th}$ chance $s_1$ \verb|=(3,2)| and $r$ \verb|=1+0.3|
         \end{itemize}
-    \item Exception: Landing on the \verb|goal| state will always yield a \verb|1x| reward
-        (of 1 for the above example) regardless of how the agent got there.
 \end{itemize}
 
 \subsection{Safety in AI}
 The following are properties of the environment that ensure valid behavior from the agent:
 
 \begin{enumerate}
-    \item The environment was created using Open AI's Gym library \cite[]{1606.01540}
-        which ensures the minimum best practices in env definition are met through useful
-        APIs like \verb|check_env| and an in-built Pseudo-random number generator (PRNG).
-    \item The PRNG referenced above is seeded with a hard-coded number in order to ensure
-        \textit{execution replicability} accross devices.
-    \item The action space, reward space, action mode space, goal and initial agent position
-        are defined using Gym's spaces API. All were initialized in a way that the use the same
-        PRNG which ensures end to end replicability.
+    \item We ensure that the agent consumes \textit{all} the \verb|pos_reward| and reaches
+        the \verb|goal_state| in the fewest number of steps by imposing a penalty of \verb|0.1x|
+        the \verb|max_reward| for every move made.
+    \item The reward on all squares is consumed once the agent lands in that state, preventing 
+    the agent from settling down in a \textit{high-reward} neighborhood.
     \item The result of any action (left, right, top, down) are clipped to the min and max
         values of 0 and \verb|GridSize| (6 in our case) respectively, ensuring that the
         agent never leaves the environment.
-    \item The reward of all states is consumed once the agent lands in that state, preventing 
-        the agent from settling down in a \textit{high-reward} neighborhood.
-    \item The reward at the goal$\backslash$target is 50\% higher than the highest possible reward for
-        any non terminal state, which helps the agent prioritize the true objective.
+    \item If the agent makes a move but remains in the same spot, we impose the \textit{maximum negative
+        reward} (-1.0 in our case). This allows the agent to disincentivize making fruitless
+        moves.
+    \item We also prevent a \textit{goal rush} (before the agent consumes all the positive
+        rewards) by making the goal square unreachable when there are positive reward squares
+        left. If the agent takes an action to move into a goal square before collecing all the
+        \textit{positive rewards}, they will be kept on the same square, incurring an additional
+        penalty (-1.0 in our case) as mentioned in the orevious point.
     \item The stocasticity of the starting point and limited time steps will nudge the agent
         to build strategies that accumulate the maximal reward in the shortest time.
 \end{enumerate}
