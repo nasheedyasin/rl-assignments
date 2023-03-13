@@ -130,9 +130,9 @@ dmypy.json
 
 # Data files
 *.csv
-*.png
+a1/assets
+a2/images
 *.jpg
-*.pdf
 *.aux
 *.fdb_latexmk
 *.fls
@@ -142,6 +142,5 @@ a1/report/report1.bbl
 a1/report/report1.bcf
 a1/report/report1.blg
 a1/report/report1.run.xml
-a1/m44_assignment1_checkpoint.zip
 *.pkl
 *.zip
