@@ -1,27 +1,17 @@
-import pickle
 import pygame
 import numpy as np
-from tqdm import tqdm
-from typing import List, Any
 
 from gymnasium import Env
 from gymnasium import spaces
-from gymnasium.utils import env_checker
 
 # Display set up
 import os
-import time
-import math
-import hashlib
-import matplotlib.pyplot as plt
-from itertools import combinations
-from IPython.display import clear_output
 
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
 
 
-class StocasticGridEnvironment(Env):
+class DeterministicGridEnvironment(Env):
     metadata = {
         "render_modes": ["human", "rgb_array"],
         "render_fps": 4,
@@ -39,6 +29,7 @@ class StocasticGridEnvironment(Env):
         render_mode=None,
         seed=88
     ):
+        # Seed the random number generator
         super().reset(seed=seed)
         self.size = size
         self.observation_space = spaces.Dict(
@@ -86,11 +77,6 @@ class StocasticGridEnvironment(Env):
             1: {'move': np.array([-1, 0]), 'name': 'up'},
             2: {'move': np.array([0, 1]), 'name': 'right'},
             3: {'move': np.array([0, -1]), 'name': 'left'},
-        }
-        self._action_mode_mapping = {
-            0: {'p': 2/3, 'name': 'as-is', 'score_mul': 1},
-            1: {'p': 2/9, 'name': 'double', 'score_mul': 2},
-            2: {'p': 1/9, 'name': 'mirror', 'score_mul': 3}
         }
 
         self.timestep = 0
@@ -140,26 +126,13 @@ class StocasticGridEnvironment(Env):
         return observation, info
 
     def step(self, action):
-        # Randomly select the action mode
-        action_mode = self.np_random.choice(
-            range(self.action_mode_space.n),
-            p=[self._action_mode_mapping[i]['p']
-               for i in range(self.action_mode_space.n)]
+        direction = self._action_to_direction[action]['move']
+        
+        # Restricting the agent to the grid.
+        new_pos = np.clip(
+            self._agent_pos + direction,
+            0, self.size - 1
         )
-
-        if self._action_mode_mapping[action_mode]['name'] in ('double', 'as-is'):
-            direction = self._action_to_direction[action]['move'].copy()
-            if self._action_mode_mapping[action_mode]['name'] == 'double':
-                direction *= 2
-
-            # Restricting the agent to the grid.
-            new_pos = np.clip(
-                self._agent_pos + direction,
-                0, self.size - 1
-            )
-
-        else:
-            new_pos = self._agent_pos[::-1]
 
         # Penalize reaching the goal before collecting all rewards
         block_exit = (self.states > 0).sum() > 1
@@ -171,17 +144,11 @@ class StocasticGridEnvironment(Env):
             else:
                 terminated = True
 
-        # Calculate base bonus
-        base_bonus = (self.states[tuple(new_pos)]>0) * \
-            .1 * self.observation_space['reward'].high[0]
-
         # Give negative reward for actions that keep you in the same
         # place (boundary actions)
         if np.array_equal(self._agent_pos, new_pos):
             reward = self.observation_space['reward'].low[0]
-        else:
-            reward = self.states[tuple(new_pos)] + base_bonus * \
-                self._action_mode_mapping[action_mode]['score_mul']
+        else: reward = self.states[tuple(new_pos)]
 
         # In all cases add a reward penalty of 0.1 * max_negative_reward
         # in other words, every action is penalized.
@@ -193,7 +160,7 @@ class StocasticGridEnvironment(Env):
         observation = self._get_obs()
 
         # Consume reward
-        self.states[tuple(self._agent_pos)] = 0
+        self.states[tuple(self._agent_pos)] = 0        
         
         # An episode is done iff the agent has reached the goal
         self.timestep += 1
@@ -202,8 +169,7 @@ class StocasticGridEnvironment(Env):
 
         info = self._get_info()
         info.update({
-            'action': self._action_to_direction[action]['name'],
-            'action_mode': self._action_mode_mapping[action_mode]['name']
+            'action': self._action_to_direction[action]['name'] 
         })
 
         if self.render_mode == "human":
