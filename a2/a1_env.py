@@ -1,21 +1,11 @@
-import pickle
 import pygame
 import numpy as np
-from tqdm import tqdm
-from typing import List, Any
 
 from gymnasium import Env
 from gymnasium import spaces
-from gymnasium.utils import env_checker
 
 # Display set up
 import os
-import time
-import math
-import hashlib
-import matplotlib.pyplot as plt
-from itertools import combinations
-from IPython.display import clear_output
 
 
 os.environ["SDL_VIDEODRIVER"] = "dummy"
