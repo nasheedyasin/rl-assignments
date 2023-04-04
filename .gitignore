@@ -143,3 +143,8 @@ a1/report/report1.blg
 a1/report/report1.run.xml
 *.pkl
 *.zip
+*.blg
+*.xml
+*.bcf
+*.bbl
+*.pickle
