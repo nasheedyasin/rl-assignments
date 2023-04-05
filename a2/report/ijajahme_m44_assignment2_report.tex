@@ -360,7 +360,7 @@ We successfully solved all three environments using simple \verb|FeedForward| ne
     \caption{Lunar Environment Evaluation}
 \end{figure}
 
-The simple Q-Learning with a \verb|FeedForward| neural network approach has successfully learned the optimal
+The Deep Q-Learning \cite{mnih2013playing} with a \verb|FeedForward| neural network approach has successfully learned the optimal
 policy for all three environments. The evaluation result for the GridEnvironment varies
 due to the agent being placed at a random start squares, which affect the number of steps
 required to reach the goal. To encourage the agent to reach the goal as quickly as possible,
@@ -368,7 +368,7 @@ we applied a negative reward of $-0.1$ for each step taken.
 
 
 \section{Discuss the Double Deep Q-Learning algorithm and the main improvements over vanilla DQN.}
-Double Deep Q-Network (DDQN) is an extension of the Deep Q-Network (DQN) algorithm, which is a deep reinforcement learning technique used to learn a policy for an agent in an environment.
+Double Deep Q-Network (DDQN) \cite{van2016deep} is an extension of the Deep Q-Network (DQN) algorithm, which is a deep reinforcement learning technique used to learn a policy for an agent in an environment.
 
 In DDQN, the idea is to address the issue of overestimation of Q-values, which can occur in the original DQN algorithm. This overestimation can lead to suboptimal or even unstable policies being learned.
 
