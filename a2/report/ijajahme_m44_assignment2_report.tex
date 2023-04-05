@@ -15,8 +15,7 @@
 \usepackage[center]{caption}
 \usepackage{subcaption}
 
-\title{CSE 546 Assignment 2 - Deep Q-Networks\\
-Checkpoint 2}
+\title{CSE 546 Assignment 2 - Deep Q-Networks}
 
 
 \author{
@@ -57,6 +56,84 @@ Checkpoint 2}
 
 \section*{Environment Description}
 
+
+\section{The Grid-world Environment}
+\label{sec:definition}
+
+There are certain features that are common to both the stocastic and deterministic environments.
+
+\subsection*{Environmental Elements}
+\begin{figure}[h]
+    \begin{center}
+        \includegraphics[width=\textwidth]{elements.png}
+    \end{center}
+    \caption{Environmental elements (from left to right; top to bottom) Agent, Goal,
+        Negative Reward, Reward}
+    \label{fig:elements}
+\end{figure}
+
+The enivironment is a \verb|6x6| grid defined according to the Gym \cite{1606.01540} API.
+With \verb|36| possible positions that the agent can
+occupy. The goal is to reach the oasis (shown in Figure \ref{fig:elements}) \textbf{after
+consuming all} the juice (positive reward) within a (configurable) maximum number of time
+steps. If the agent lands on a juice tile it is awarded +0.99 and the cactus (negative
+reward) leads to a -1.0 reward. Once all the juice is consumed, the agent must proceed to the
+oasis to earn a reward of +1.0
+The states in this enviroment are a \textbf{combination} of the agent's position and the
+currently available rewards (positive, negative and goal) on the grid. The Formula
+\ref{eqn:num-states} gives us the number of possible states for the agent.
+
+\begin{equation}
+    num_{states}=num_{pos} \sum_{k=0}^{c_{reward}} {c_{reward}\choose k}
+    \label{eqn:num-states}
+\end{equation}
+
+Here $num_{pos}$ refers to the number of grid squares, \verb|36| in our case. $c_{reward}$
+refers to the number of positive rewards + the number of negative rewards + 1 (for the goal
+state). We have \verb|6| negative rewards, \verb|3| positive rewards and one goal. Hence, 
+the $num_{states}$ for us is \verb|36864|.
+
+In each position our agent can take 4 potential actions:
+\begin{enumerate*}
+    \item Left
+    \item Right
+    \item Up
+    \item Down.
+\end{enumerate*}
+Resetting the environment will not change the location or distribution of the rewards and
+goal state. It only alters the initial state of the agent.
+
+\begin{figure}[h]
+    \begin{center}
+        \includegraphics[scale=0.50]{vis.png}
+    \end{center}
+    \caption{Environment visualizations}
+\end{figure}
+
+\subsection{Safety in AI}
+\label{sec:safety}
+The following are properties of the environment that ensure valid behavior from the agent:
+
+\begin{enumerate}
+    \item We ensure that the agent consumes \textit{all} the \verb|pos_reward| and reaches
+        the \verb|goal_state| in the fewest number of steps by imposing a penalty of \verb|0.1x|
+        the \verb|max_reward| for every move made.
+    \item The reward on all squares is consumed once the agent lands in that state, preventing 
+    the agent from settling down in a \textit{high-reward} neighborhood.
+    \item The result of any action (left, right, top, down) are clipped to the min and max
+        values of 0 and \verb|GridSize| (6 in our case) respectively, ensuring that the
+        agent never leaves the environment.
+    \item If the agent makes a move but remains in the same spot, we impose the \textit{maximum negative
+        reward} (-1.0 in our case). This allows the agent to disincentivize making fruitless
+        moves.
+    \item We also prevent a \textit{goal rush} (before the agent consumes all the positive
+        rewards) by making the goal square unreachable when there are positive reward squares
+        left. If the agent takes an action to move into a goal square before collecing all the
+        \textit{positive rewards}, they will be kept on the same square, incurring an additional
+        penalty (-1.0 in our case) as detailed in the previous point.
+    \item The stocasticity of the starting point and limited time steps will nudge the agent
+        to build strategies that accumulate the maximal reward in the shortest time.
+\end{enumerate}
 
 \section{CartPole-v1}
 \label{sec:cart-definition}
@@ -172,84 +249,6 @@ At the beginning of each episode, the lander is positioned at the top center of 
 \subsection{Episode End}
 An episode terminates if any of the following conditions are met: \begin{enumerate} \item The lander crashes (its body comes into contact with the moon). \item The lander moves outside of the viewport (its \verb|x| coordinate is greater than 1). \item The lander is not awake. According to the Box2D documentation, a body that is not awake does not move or collide with any other body. \end{enumerate}
 
-\section{The Grid-world Environment}
-\label{sec:definition}
-
-There are certain features that are common to both the stocastic and deterministic environments.
-
-\subsection*{Environmental Elements}
-\begin{figure}[h]
-    \begin{center}
-        \includegraphics[width=\textwidth]{elements.png}
-    \end{center}
-    \caption{Environmental elements (from left to right; top to bottom) Agent, Goal,
-        Negative Reward, Reward}
-    \label{fig:elements}
-\end{figure}
-
-The enivironment is a \verb|6x6| grid defined according to the Gym \cite{1606.01540} API.
-With \verb|36| possible positions that the agent can
-occupy. The goal is to reach the oasis (shown in Figure \ref{fig:elements}) \textbf{after
-consuming all} the juice (positive reward) within a (configurable) maximum number of time
-steps. If the agent lands on a juice tile it is awarded +0.99 and the cactus (negative
-reward) leads to a -1.0 reward. Once all the juice is consumed, the agent must proceed to the
-oasis to earn a reward of +1.0
-The states in this enviroment are a \textbf{combination} of the agent's position and the
-currently available rewards (positive, negative and goal) on the grid. The Formula
-\ref{eqn:num-states} gives us the number of possible states for the agent.
-
-\begin{equation}
-    num_{states}=num_{pos} \sum_{k=0}^{c_{reward}} {c_{reward}\choose k}
-    \label{eqn:num-states}
-\end{equation}
-
-Here $num_{pos}$ refers to the number of grid squares, \verb|36| in our case. $c_{reward}$
-refers to the number of positive rewards + the number of negative rewards + 1 (for the goal
-state). We have \verb|6| negative rewards, \verb|3| positive rewards and one goal. Hence, 
-the $num_{states}$ for us is \verb|36864|.
-
-In each position our agent can take 4 potential actions:
-\begin{enumerate*}
-    \item Left
-    \item Right
-    \item Up
-    \item Down.
-\end{enumerate*}
-Resetting the environment will not change the location or distribution of the rewards and
-goal state. It only alters the initial state of the agent.
-
-\begin{figure}[h]
-    \begin{center}
-        \includegraphics[scale=0.50]{vis.png}
-    \end{center}
-    \caption{Environment visualizations}
-\end{figure}
-
-\subsection{Safety in AI}
-\label{sec:safety}
-The following are properties of the environment that ensure valid behavior from the agent:
-
-\begin{enumerate}
-    \item We ensure that the agent consumes \textit{all} the \verb|pos_reward| and reaches
-        the \verb|goal_state| in the fewest number of steps by imposing a penalty of \verb|0.1x|
-        the \verb|max_reward| for every move made.
-    \item The reward on all squares is consumed once the agent lands in that state, preventing 
-    the agent from settling down in a \textit{high-reward} neighborhood.
-    \item The result of any action (left, right, top, down) are clipped to the min and max
-        values of 0 and \verb|GridSize| (6 in our case) respectively, ensuring that the
-        agent never leaves the environment.
-    \item If the agent makes a move but remains in the same spot, we impose the \textit{maximum negative
-        reward} (-1.0 in our case). This allows the agent to disincentivize making fruitless
-        moves.
-    \item We also prevent a \textit{goal rush} (before the agent consumes all the positive
-        rewards) by making the goal square unreachable when there are positive reward squares
-        left. If the agent takes an action to move into a goal square before collecing all the
-        \textit{positive rewards}, they will be kept on the same square, incurring an additional
-        penalty (-1.0 in our case) as detailed in the previous point.
-    \item The stocasticity of the starting point and limited time steps will nudge the agent
-        to build strategies that accumulate the maximal reward in the shortest time.
-\end{enumerate}
-
 \section{Discuss the benefits of:}
 \subsection{Using experience replay in DQN and how its size can influence the results}
 
@@ -264,17 +263,46 @@ This solves the problem of dealing with larger state-action domains or complex n
 
 \section{Show and discuss your results after applying your DQN implementation on the three environments.}
 
+\subsection{GridWorld}
+
+We represent the current state of the environment as a 36 dimensional vector of rank 1. Here each
+component of the vector has one of 3 values which indicate:
+
+\begin{itemize}
+    \item[$0.5$:] Agent location
+    \item[$-1.0$:] Negative reward
+    \item[$0.99$:] Positive reward
+    \item[$1.0$:] Goal square
+\end{itemize}
+
+We feed this vector to a \verb|Feed-forward Network| that will give us the estimated
+action-values. Then We take the \verb|argmax| over these action-values. We consider the
+environments as solved when we have achieved a 100 episode running average of $~2.1$.
+
+\subsection{CartPole-v1 \& LunarLander-v2}
+For both these environments we have rather similar action spaces (\verb|Discrete|), hence the
+\verb|Feed-forward Network| architechture used is also similar. The input of the network has the shape
+\verb|1 x state-space| output of network will \verb|1 x action-space|.
+
+The enivironments are considered solved when:
+\begin{itemize}
+    \item[] \textbf{CartPole-v1} Running average reward of 500 (100 episodes)
+    \item[] \textbf{LunarLander-v2} Running average reward $>$ 200 (100 episodes)
+\end{itemize}
+
+
+\subsection{Training Discussion}
 
 \begin{figure}[H]
     \begin{center}
-        \includegraphics[width=\textwidth]{grid_training.png}
+        \includegraphics[width=\textwidth]{grid_training_ddqn.png}
     \end{center}
     \caption{Grid Training}
 \end{figure}
 
 \begin{figure}[H]
     \begin{center}
-        \includegraphics[width=\textwidth]{eps_grid.png}
+        \includegraphics[width=\textwidth]{eps_grid_ddqn.png}
     \end{center}
     \caption{Epsilon Decay -- Grid Env}
 \end{figure}
@@ -295,14 +323,14 @@ This solves the problem of dealing with larger state-action domains or complex n
 
 \begin{figure}[H]
     \begin{center}
-        \includegraphics[width=\textwidth]{lunar_training.png}
+        \includegraphics[width=\textwidth]{lunar_training_ddqn.png}
     \end{center}
     \caption{Lunar Lander Training}
 \end{figure}
 
 \begin{figure}[H]
     \begin{center}
-        \includegraphics[width=\textwidth]{eps_lunar.png}
+        \includegraphics[width=\textwidth]{eps_lunar_ddqn.png}
     \end{center}
     \caption{Epsilon Decay -- Lunar Lander}
 \end{figure}
@@ -332,7 +360,128 @@ We successfully solved all three environments using simple \verb|FeedForward| ne
     \caption{Lunar Environment Evaluation}
 \end{figure}
 
-The simple \verb|FeedForward| neural network approach has successfully learned the optimal policy for all three environments. The evaluation result for the GridEnvironment is somewhat inconsistent because the agent is placed at a random starting square, which affects the number of steps required to reach the goal. To encourage the agent to reach the goal as quickly as possible, we applied a negative reward of $-0.1$ for each step taken.
+The simple Q-Learning with a \verb|FeedForward| neural network approach has successfully learned the optimal
+policy for all three environments. The evaluation result for the GridEnvironment varies
+due to the agent being placed at a random start squares, which affect the number of steps
+required to reach the goal. To encourage the agent to reach the goal as quickly as possible,
+we applied a negative reward of $-0.1$ for each step taken.
+
+
+\section{Discuss the Double Deep Q-Learning algorithm and the main improvements over vanilla DQN.}
+Double Deep Q-Network (DDQN) is an extension of the Deep Q-Network (DQN) algorithm, which is a deep reinforcement learning technique used to learn a policy for an agent in an environment.
+
+In DDQN, the idea is to address the issue of overestimation of Q-values, which can occur in the original DQN algorithm. This overestimation can lead to suboptimal or even unstable policies being learned.
+
+To address this, DDQN uses a second network (known as the "target" network) to help estimate the Q-values used to update the primary network. The target network is a copy of the primary network, but with frozen parameters that are only periodically updated. This helps to prevent the overestimation of Q-values, as the target network provides a more accurate estimate of the true Q-values.
+
+\section{Show and discuss your results after applying your DDQN implementation on the environment.
+Plots should include epsilon decay and the total reward per episode}
+
+\subsection{GridWorld}
+
+We represent the current state of the environment as a 36 dimensional vector of rank 1. Here each
+component of the vector has one of 3 values which indicate:
+
+\begin{itemize}
+    \item[$0.5$:] Agent location
+    \item[$-1.0$:] Negative reward
+    \item[$0.99$:] Positive reward
+    \item[$1.0$:] Goal square
+\end{itemize}
+
+We feed this vector to a \verb|Feed-forward Network| that will give us the estimated
+action-values. Then We take the \verb|argmax| over these action-values. We consider the
+environments as solved when we have achieved a 100 episode running average of $~2.1$.
+
+\subsection{CartPole-v1 \& LunarLander-v2}
+For both these environments we have rather similar action spaces (\verb|Discrete|), hence the
+\verb|Feed-forward Network| architechture used is also similar. The input of the network has the shape
+\verb|1 x state-space| output of network will \verb|1 x action-space|.
+
+The enivironments are considered solved when:
+\begin{itemize}
+    \item[] \textbf{CartPole-v1} Running average reward of 500 (100 episodes)
+    \item[] \textbf{LunarLander-v2} Running average reward $>$ 200 (100 episodes)
+\end{itemize}
+
+
+
+\subsection{Training Discussion}
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{grid_training_ddqn.png}
+    \end{center}
+    \caption{Grid Training}
+\end{figure}
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{eps_grid_ddqn.png}
+    \end{center}
+    \caption{Epsilon Decay -- Grid Env}
+\end{figure}
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{cart_training.png}
+    \end{center}
+    \caption{Cart-Pole Training}
+\end{figure}
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{eps_cart.png}
+    \end{center}
+    \caption{Epsilon Decay -- Cart Pole}
+\end{figure}
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{lunar_training_ddqn.png}
+    \end{center}
+    \caption{Lunar Lander Training}
+\end{figure}
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{eps_lunar_ddqn.png}
+    \end{center}
+    \caption{Epsilon Decay -- Lunar Lander}
+\end{figure}
+
+We successfully solved all three environments using simple \verb|FeedForward| neural networks. Additionally, we implemented a tau-based Target Network update strategy to stabilize the training process and used an experience replay memory of size 10000. Of the three environments, \verb|CartPole-v1| exhibited the most unstable learning. This instability is due to the fact that a single misstep in \verb|CartPole-v1| can cause the pole to collapse and the episode to end prematurely. The other two environments had more stable learning curves and were successfully solved by the DQN agent.
+
+\section{Provide the evaluation results. Run your agent on the three environments for at least 5 episodes, where the agent chooses only greedy actions from the learnt policy.}
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{grid_evaluate_ddqn.png}
+    \end{center}
+    \caption{Grid Environment Evaluation}
+\end{figure}
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{cart_evaluate.png}
+    \end{center}
+    \caption{Cart Environment Evaluation}
+\end{figure}
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{lunar_evaluate_ddqn.png}
+    \end{center}
+    \caption{Lunar Environment Evaluation}
+\end{figure}
+
+The Double Q-Learning with a \verb|FeedForward| neural network approach has successfully learned the optimal
+policy for all three environments. The evaluation result for the GridEnvironment varies
+due to the agent being placed at a random start squares, which affect the number of steps
+required to reach the goal. To encourage the agent to reach the goal as quickly as possible,
+we applied a negative reward of $-0.1$ for each step taken.
+
+
 
 
 \printbibliography
