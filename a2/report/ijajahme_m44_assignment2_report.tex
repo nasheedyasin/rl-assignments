@@ -481,8 +481,55 @@ due to the agent being placed at a random start squares, which affect the number
 required to reach the goal. To encourage the agent to reach the goal as quickly as possible,
 we applied a negative reward of $-0.1$ for each step taken.
 
+\section{Training Strategy Comparison}
 
+\subsection{GridWorld}
 
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{grid_compare.png}
+    \end{center}
+    \caption{Gridworld Agent Training Comparison}
+\end{figure}
+
+The GridWorld environment is relatively simple, both the DQN and DDQN models may have enough capacity to learn the optimal solution. The capacity of a model refers to its ability to capture the complexities and patterns in the data. In more complex environments, the DDQN model may have an advantage over the DQN model since it can more effectively learn the optimal action values by reducing overestimation bias.
+
+Secondly, since the GridWorld environment is not very complex, the exploration-exploitation trade-off is not a significant concern. Both the DQN and DDQN models can effectively explore the environment and learn the optimal solution without getting stuck in local minima.
+
+Therefore, it is not surprising that the DQN and DDQN models converge at nearly similar rates in a simplistic environment like the GridWorld environment.
+
+\subsection{Cartpole v-1}
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{cart_compare.png}
+    \end{center}
+    \caption{LunarLander Agent Training Comparison}
+\end{figure}
+
+In some instances of this environment, the DQN model may outperform the DDQN model.
+
+One reason for this could be that the DDQN model is highly sensitive to its hyperparameters, such as the learning rate and discount factor. Finding optimal hyperparameters for the DDQN model can be difficult, especially in more complex environments. In contrast, the DQN model may be more stable during training and may require less tuning of hyperparameters.
+
+Overall, the DQN model may be a simpler and more stable choice for solving the CartPole environment, although the performance of both models can depend on the specific instance of the environment and the hyperparameters used.
+
+\subsection{LunarLander v-2}
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{lunar_compare.png}
+    \end{center}
+    \caption{LunarLander Agent Training Comparison}
+\end{figure}
+
+The LunarLander v-2 is again rather simple in terms of it's state and action spaces. And we
+see that the DQN slightly outperforms the DDQN algorithm. However, hyperparameters could be
+a factor--the performance of both DQN and DDQN can be highly sensitive to their
+hyperparameters, such as learning rate, batch size, and discount factor. It's possible that
+the
+hyperparameters used for the DQN algorithm were more suitable for the specific instance of
+the LunarLander v2 environment (discrete), while the hyperparameters used for the DDQN algorithm were
+not as optimal.
 
 \printbibliography
 
