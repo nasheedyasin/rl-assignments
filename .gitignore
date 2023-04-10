@@ -132,6 +132,7 @@ dmypy.json
 *.csv
 a1/assets
 a2/images
+grp_prj/data
 *.aux
 *.fdb_latexmk
 *.fls
