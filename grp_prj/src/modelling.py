@@ -87,9 +87,12 @@ class LanguageModel(pl.LightningModule):
         ids, text_tokens = batch
 
         with torch.no_grad():
-            output = self.lang_model.generate(text_tokens['input_ids'])
+            output = self.lang_model.generate(
+                text_tokens['input_ids'],
+                max_length=1000
+            )
 
-        return output
+        return ids, output
 
     def configure_optimizers(self):
         param_dicts = [
