@@ -12,7 +12,8 @@ class LanguageModel(pl.LightningModule):
         self,
         mpath: str,
         lr: float = 3e-5,
-        weight_decay: float = 1e-4
+        weight_decay: float = 1e-4,
+        embedding_size: int = None
     ):
         """
         Args:
@@ -21,6 +22,8 @@ class LanguageModel(pl.LightningModule):
             Defaults to 2e-4.
             weight_decay (float, optional): Common weight decay co-efficient.
             Defaults to 1e-4.
+            embedding_size (int, optional): Length of the tokenizer (len(tokenizer)).
+            Use this arg if spl tokens have been added to the tokenizer.
         """
         super().__init__()
         self.lr = lr
@@ -30,6 +33,10 @@ class LanguageModel(pl.LightningModule):
         self.lang_model = AutoModelForCausalLM.from_pretrained(
             mpath
         )
+
+        # Resize the embedding layer if needed
+        if embedding_size is not None:
+            self.lang_model.resize_token_embeddings(embedding_size)
 
         # GPT Models don't have a padding requirement, hence this is not set
         # GPT Models have all special tokens set to eos_token
