@@ -7,7 +7,7 @@ from sentence_transformers.models import Pooling
 from torchmetrics.classification import MulticlassF1Score
 
 
-class LanguageModel(pl.LightningModule):
+class DialogAgent(pl.LightningModule):
     def __init__(
         self,
         mpath: str,
@@ -30,19 +30,19 @@ class LanguageModel(pl.LightningModule):
         self.weight_decay = weight_decay
 
         # Base model        
-        self.lang_model = AutoModelForCausalLM.from_pretrained(
+        self.clm = AutoModelForCausalLM.from_pretrained(
             mpath
         )
 
         # Resize the embedding layer if needed
         if embedding_size is not None:
-            self.lang_model.resize_token_embeddings(embedding_size)
+            self.clm.resize_token_embeddings(embedding_size)
 
         # GPT Models don't have a padding requirement, hence this is not set
         # GPT Models have all special tokens set to eos_token
-        if not self.lang_model.config.pad_token_id:
-            self.lang_model.config.pad_token_id = \
-                self.lang_model.config.eos_token_id
+        if not self.clm.config.pad_token_id:
+            self.clm.config.pad_token_id = \
+                self.clm.config.eos_token_id
 
         # Save the init arguments
         self.save_hyperparameters()
@@ -54,7 +54,7 @@ class LanguageModel(pl.LightningModule):
         if labels is not None:
             labels = labels.to(self.device)
 
-        return self.lang_model(**text_tokens, labels=labels)
+        return self.clm(**text_tokens, labels=labels)
 
     def common_step(self, batch, batch_idx):
         ids, text_tokens, labels = batch
@@ -94,7 +94,7 @@ class LanguageModel(pl.LightningModule):
         ids, text_tokens = batch
 
         with torch.no_grad():
-            output = self.lang_model.generate(
+            output = self.clm.generate(
                 text_tokens['input_ids'],
                 max_length=1000
             )
