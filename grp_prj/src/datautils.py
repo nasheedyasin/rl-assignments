@@ -165,7 +165,7 @@ class DialogBatcher:
         batch_encodings = self.tokenizer.pad(
             batch_encodings,
             padding='max_length',
-            max_length=min(self.tokenizer.max_model_length, batch_max_len),
+            max_length=min(self.tokenizer.model_max_length, batch_max_len),
             
         )
 
