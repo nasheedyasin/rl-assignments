@@ -1,10 +1,8 @@
 import torch
 import pytorch_lightning as pl
 
-from transformers import AutoModelForCausalLM
 from torch.nn import functional as F
-from sentence_transformers.models import Pooling
-from torchmetrics.classification import MulticlassF1Score
+from transformers import AutoModelForCausalLM
 
 
 class DialogAgent(pl.LightningModule):
