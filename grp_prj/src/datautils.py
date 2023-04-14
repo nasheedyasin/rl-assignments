@@ -154,10 +154,17 @@ class DialogBatcher:
         ids = [i[0] for i in batch]
         batch_encodings: List[BatchEncoding] = [i[1] for i in batch]
 
+        # Get the max length of the utterance + history
+        batch_max_len = max(
+            [len(i['input_ids']) for i in batch_encodings]
+        )
+
         # Pad and aggregate
         batch_encodings = self.tokenizer.pad(
             batch_encodings,
-            padding=True
+            padding='max_length',
+            max_length=min(self.tokenizer.max_model_length, batch_max_len)
+            
         )
 
         # Pad the labels
