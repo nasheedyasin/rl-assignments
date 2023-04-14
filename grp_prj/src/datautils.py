@@ -142,6 +142,8 @@ class DialogBatcher:
         """
         self.tokenizer: AutoTokenizer = tokenizer
 
+        self.tokenizer.truncation_side = 'left'
+
         # GPT Models don't have a padding requirement, hence this is not set
         # GPT Models have all special tokens set to eos_token
         if self.tokenizer.pad_token is None:
@@ -163,7 +165,7 @@ class DialogBatcher:
         batch_encodings = self.tokenizer.pad(
             batch_encodings,
             padding='max_length',
-            max_length=min(self.tokenizer.max_model_length, batch_max_len)
+            max_length=min(self.tokenizer.max_model_length, batch_max_len),
             
         )
 
