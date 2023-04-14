@@ -171,6 +171,8 @@ class DialogDataModule(pl.LightningDataModule):
                 Train mode: Only the train set will be used. This train set will be further
                 divided into train and validation sets.
         """
+        super().__init__()
+
         if os.path.exists(data):
             self.data_path = data
         else:
