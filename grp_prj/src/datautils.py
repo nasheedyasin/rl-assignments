@@ -1,13 +1,12 @@
 import os
-import torch
 import pytorch_lightning as pl
 
 from copy import deepcopy
 from transformers import AutoTokenizer, BatchEncoding, pipeline
 from torch.utils.data import DataLoader, Dataset
-from convokit import Corpus, Conversation, Utterance, download
+from convokit import Corpus, Conversation, download
 from sklearn.model_selection import train_test_split
-from typing import Dict, List, Literal, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 
 
@@ -69,27 +68,26 @@ class DialogBatcher:
         https://github.com/huggingface/transformers/issues/2630#issuecomment-684512764
         """
         role_markers = self.tokenizer.special_tokens_map['additional_special_tokens']
-        base_utt = f"{self.tokenizer.bos_token} {self.purpose_text}\n\n"
+
+        base_utt = f"{self.tokenizer.bos_token} {self.purpose_text} {role_markers[0]}"
         tokenized_hist = self.tokenizer(base_utt)
         tokenized_hist['labels'] = [-100] * len(tokenized_hist['input_ids'])
 
         ids: List[int] = list()
         batch_encodings: List[BatchEncoding] = list()
         for utt in convo.iter_utterances():
-            utt_text = f"{role_markers[utt.meta['role']]} {utt.text}"
-
             # If the utterance is for the role in question 
             if (self.is_pursuader and utt.meta['role']==0) or \
                 (not self.is_pursuader and utt.meta['role']==1):
 
-                formatted_utterance = f"{utt_text}{self.tokenizer.eos_token}"
+                formatted_utterance = f"{utt.text}{self.tokenizer.eos_token}"
                 tokenized_utt = self.tokenizer(
                     formatted_utterance,
                     text_target=formatted_utterance
                 )
                 
             else:
-                tokenized_utt = self.tokenizer(utt_text)
+                tokenized_utt = self.tokenizer(utt.text)
                 tokenized_utt['labels'] = [-100] * len(tokenized_utt['input_ids'])
 
             # Concatenate hist to the current
@@ -114,6 +112,15 @@ class DialogBatcher:
             else:
                 tokenized_hist = deepcopy(tokenized_utt)
 
+            # Add the next role Label (only 2 roles are present)
+            tokenized_hist['input_ids'].append(
+                self.tokenizer.convert_tokens_to_ids(
+                    role_markers[int(not utt.meta['role'])]
+                )
+            )
+            tokenized_hist['attention_mask'].append(1)
+            tokenized_hist['labels'].append(-100)
+
         return ids, batch_encodings
 
     def __call__(self, batch: Sequence[Conversation]):
@@ -128,7 +135,7 @@ class DialogBatcher:
             ids.extend(utt_ids)
             batch_encodings.extend(utt_batch_encodings)
 
-        # Tensorify, pad and aggregate
+        # Pad and aggregate
         batch_encodings = self.tokenizer.pad(
             batch_encodings,
             padding=True
@@ -141,12 +148,8 @@ class DialogBatcher:
             batch_encodings['labels'][idx] = \
                 target + [-100] * (batch_max_length-len(target))
 
-        # Tensorify, pad and aggregate
-        batch_encodings = self.tokenizer.pad(
-            batch_encodings,
-            padding=True,
-            return_tensors='pt'
-        )
+        # Tensorify
+        batch_encodings.convert_to_tensors('pt')
 
         return ids, batch_encodings
 
