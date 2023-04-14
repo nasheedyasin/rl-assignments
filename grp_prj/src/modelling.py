@@ -47,18 +47,17 @@ class DialogAgent(pl.LightningModule):
         # Save the init arguments
         self.save_hyperparameters()
 
-    def forward(self, text_tokens, labels=None):
+    def forward(self, text_tokens):
         # Push all inputs to the device in use
         text_tokens = {k: v.to(self.device) for k, v in text_tokens.items()}
 
-        if labels is not None:
-            labels = labels.to(self.device)
+        labels = text_tokens.get('labels')
 
         return self.clm(**text_tokens, labels=labels)
 
     def common_step(self, batch, batch_idx):
-        ids, text_tokens, labels = batch
-        output = self(text_tokens, labels)
+        ids, text_tokens = batch
+        output = self(text_tokens)
 
         return {
             'loss': output.loss

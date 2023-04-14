@@ -1,99 +1,167 @@
 import os
-import json
 import torch
-import string
-import numpy as np
-import pandas as pd
 import pytorch_lightning as pl
 
-from tqdm import tqdm
-from abc import ABC, abstractmethod
-from convokit import Corpus, download
-from transformers import AutoTokenizer, pipeline
+from copy import deepcopy
+from transformers import AutoTokenizer, BatchEncoding, pipeline
 from torch.utils.data import DataLoader, Dataset
+from convokit import Corpus, Conversation, Utterance, download
 from sklearn.model_selection import train_test_split
 from typing import Dict, List, Literal, Optional, Sequence, Tuple
 
 
 
 class DialogDataset(Dataset):
-    pass
+    def __init__(
+        self,
+        convos: List[Conversation]
+    ):
+        self.convos = convos
+
+    def __len__(self):
+        return len(self.convos)
+
+    def __getitem__(self, index):
+        return self.convos[index]
+
 
 class DialogBatcher:
     def __init__(
         self,
-        tnkzr_path: str,
-        has_targets: bool = True,
-        concat_title_and_generation: bool = False
+        tokenizer: AutoTokenizer,
+        purpose_text: str = "",
+        needs_targets: bool = True,
+        is_pursuader: bool = True
     ):
         """
         Args:
-            tnkzr_path (str): Path to load the `Transformers` tokenizer
+            tokenizer (AutoTokenizer): The `Transformers` tokenizer
             to be used.
-            has_targets (bool): Does the dataset have target information.
+            purpose_text (str): Add some purpose information to the head of every
+            conversation. Defaults to "".
+            needs_targets (bool): Do labels have to be generated?
             Defaults to True.
-            concat_title_and_generation (bool): Whether to concatenate the title
-            to the generation. Could be useful for non-autoregressive models.
+            is_pursuader (bool): Are you generating data to train the persuader?
+            Defaults to True.
+        
+        Note:
+        Ensure the first value in tokenizer's special_tokens_map['additional_special_tokens']
+        is the persuader and the second the persuadee. Also ensure there are only 2 values.
         """
-        self.has_targets = has_targets
-        self.tokenizer = AutoTokenizer.from_pretrained(tnkzr_path)
+        self.tokenizer: AutoTokenizer = tokenizer
+        self.needs_targets = needs_targets
+        self.is_pursuader = is_pursuader
+        self.purpose_text = purpose_text
 
         # GPT Models don't have a padding requirement, hence this is not set
         # GPT Models have all special tokens set to eos_token
-        if not self.tokenizer.pad_token:
+        if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
-            self.tokenizer.padding_side = 'left'
 
-        self.concat_title_and_generation = concat_title_and_generation
-
-    def __call__(self, batch: Sequence):
-        """Use this function as the `collate_fn` mentioned earlier.
+    def _build_samples(
+        self,
+        convo: Conversation
+    ) -> Tuple[List[int], List[BatchEncoding]]:
+        """Generates samples for the conversation by concatenating history to each
+        utterance. Further we use the `self.is_persuader` flag to generate appropriate
+        persuader or persuadee finetuning data.
+        Note: No need to pad fo causal LMs.
+        https://github.com/huggingface/transformers/issues/2630#issuecomment-684512764
         """
-        ids = torch.tensor([int(sample[0]) for sample in batch], dtype=torch.int32)
+        role_markers = self.tokenizer.special_tokens_map['additional_special_tokens']
+        base_utt = f"{self.tokenizer.bos_token} {self.purpose_text}\n\n"
+        tokenized_hist = self.tokenizer(base_utt)
+        tokenized_hist['labels'] = [-100] * len(tokenized_hist['input_ids'])
 
-        if self.concat_title_and_generation:
-            text_tokens = self.tokenizer(
-                [f"{sample[1]} {sample[2]}" for sample in batch],
-                padding="max_length",
-                truncation=True,
-                return_tensors='pt'
-            )
-        else:
-            # The tokenization is done with the title as sentence 1 and
-            # generation as sentence 2
-            text_tokens = self.tokenizer(
-                [sample[1] for sample in batch], # The title
-                [sample[2] for sample in batch], # The generation
-                padding="max_length",
-                truncation=True,
-                return_tensors='pt'
-            )
+        ids: List[int] = list()
+        batch_encodings: List[BatchEncoding] = list()
+        for utt in convo.iter_utterances():
+            utt_text = f"{role_markers[utt.meta['role']]} {utt.text}"
 
-        if not self.has_targets:
-            return ids, text_tokens
+            # If the utterance is for the role in question 
+            if (self.is_pursuader and utt.meta['role']==0) or \
+                (not self.is_pursuader and utt.meta['role']==1):
 
-        targets = torch.tensor(
-            [sample[3]for sample in batch],
-            dtype=torch.long
+                formatted_utterance = f"{utt_text}{self.tokenizer.eos_token}"
+                tokenized_utt = self.tokenizer(
+                    formatted_utterance,
+                    text_target=formatted_utterance
+                )
+                
+            else:
+                tokenized_utt = self.tokenizer(utt_text)
+                tokenized_utt['labels'] = [-100] * len(tokenized_utt['input_ids'])
+
+            # Concatenate hist to the current
+            for key in tokenized_utt.keys():
+                tokenized_utt[key] = deepcopy(tokenized_hist[key]+tokenized_utt[key])
+
+            # Update the base and data returning
+            if (self.is_pursuader and utt.meta['role']==0) or \
+                (not self.is_pursuader and utt.meta['role']==1):
+
+                # Append the utterance    
+                ids.append(utt.id)
+                batch_encodings.append(tokenized_utt)
+
+                # Remove the EOS token from history 
+                for key in tokenized_utt.keys():
+                    tokenized_hist[key] = deepcopy(tokenized_utt[key][:-1])
+
+                # Update the labels
+                tokenized_hist['labels'] = [-100] * len(tokenized_hist['input_ids'])
+
+            else:
+                tokenized_hist = deepcopy(tokenized_utt)
+
+        return ids, batch_encodings
+
+    def __call__(self, batch: Sequence[Conversation]):
+        """Use this function as the `collate_fn` for the torch Dataloader.
+        """
+        ids: List[int] = list()
+        batch_encodings: List[BatchEncoding] = list()
+        for convo in batch:
+            # Get the encoded utterances
+            utt_ids, utt_batch_encodings = self._build_samples(convo)
+
+            ids.extend(utt_ids)
+            batch_encodings.extend(utt_batch_encodings)
+
+        # Tensorify, pad and aggregate
+        batch_encodings = self.tokenizer.pad(
+            batch_encodings,
+            padding=True
         )
 
-        return ids, text_tokens, targets
+        # Pad the labels
+        batch_max_length = len(batch_encodings['input_ids'][0])
 
-# CFT = Causal Finetune
+        for idx, target in enumerate(batch_encodings['labels']):
+            batch_encodings['labels'][idx] = \
+                target + [-100] * (batch_max_length-len(target))
+
+        # Tensorify, pad and aggregate
+        batch_encodings = self.tokenizer.pad(
+            batch_encodings,
+            padding=True,
+            return_tensors='pt'
+        )
+
+        return ids, batch_encodings
+
 class DialogDataModule(pl.LightningDataModule):
     def __init__(
         self,
         data: str, /,
         batcher: DialogBatcher,
         batch_size: int = 16,
-        is_pursuader: bool = True,
         split_data: bool = True
     ):
         """
         Args:
             data (str): path to or name of the dataset.
             batcher (SynBatcher): Custom data batching logic.
-            is_pursuader (bool): Configure datamodule for pursuader. Defaults to True.
             split_data (bool): Whether or not to split the data into train and test
             sets.
                 Eval mode: Only the test set will be used.
@@ -107,7 +175,6 @@ class DialogDataModule(pl.LightningDataModule):
 
         self.batcher = batcher
         self.batch_size = batch_size
-        self.is_pursuader = is_pursuader
         self.split_data = split_data
 
     def setup(
