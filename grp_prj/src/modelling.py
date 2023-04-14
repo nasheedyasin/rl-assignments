@@ -49,9 +49,7 @@ class DialogAgent(pl.LightningModule):
         # Push all inputs to the device in use
         text_tokens = {k: v.to(self.device) for k, v in text_tokens.items()}
 
-        labels = text_tokens.get('labels')
-
-        return self.clm(**text_tokens, labels=labels)
+        return self.clm(**text_tokens)
 
     def common_step(self, batch, batch_idx):
         ids, text_tokens = batch
