@@ -22,10 +22,12 @@ class DialogDataset(Dataset):
         purpose_text: str = "",
         is_pursuader: bool = True,
         shuffle: bool = False,
+        max_length=768
     ):
         self.tokenizer: AutoTokenizer = tokenizer
         self.is_pursuader = is_pursuader
         self.purpose_text = purpose_text
+        self.max_length = max_length
 
         # GPT Models don't have a padding requirement, hence this is not set
         # GPT Models have all special tokens set to eos_token
@@ -53,7 +55,7 @@ class DialogDataset(Dataset):
 
     def _build_samples(
         self,
-        convo: Conversation
+        convo: Conversation,
     ) -> Tuple[List[str], List[BatchEncoding]]:
         """Generates samples for the conversation by concatenating history to each
         utterance. Further we use the `self.is_persuader` flag to generate appropriate
@@ -86,6 +88,10 @@ class DialogDataset(Dataset):
             # Concatenate hist to the current
             for key in tokenized_utt.keys():
                 tokenized_utt[key] = deepcopy(tokenized_hist[key]+tokenized_utt[key])
+                # Truncate from the left
+                if len(tokenized_utt[key]) > self.max_length:
+                    truncation_length = len(tokenized_utt[key]) - self.max_length
+                    tokenized_utt[key] = tokenized_utt[key][truncation_length: ]
 
             # Update the base and data returning
             if (self.is_pursuader and utt.meta['role']==0) or \
@@ -142,8 +148,6 @@ class DialogBatcher:
         """
         self.tokenizer: AutoTokenizer = tokenizer
 
-        self.tokenizer.truncation_side = 'left'
-
         # GPT Models don't have a padding requirement, hence this is not set
         # GPT Models have all special tokens set to eos_token
         if self.tokenizer.pad_token is None:
@@ -156,17 +160,11 @@ class DialogBatcher:
         ids = [i[0] for i in batch]
         batch_encodings: List[BatchEncoding] = [i[1] for i in batch]
 
-        # Get the max length of the utterance + history
-        batch_max_len = max(
-            [len(i['input_ids']) for i in batch_encodings]
-        )
-
         # Pad and aggregate
         batch_encodings = self.tokenizer.pad(
             batch_encodings,
             padding='max_length',
-            max_length=min(self.tokenizer.model_max_length, batch_max_len),
-            
+            max_length=768
         )
 
         # Pad the labels
