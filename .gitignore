@@ -152,3 +152,4 @@ a1/report/report1.run.xml
 *.bbl
 *.pickle
 *.ckpt
+*.pth
