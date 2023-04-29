@@ -107,14 +107,14 @@ The main difference between value-based and actor-critic algorithms lies in thei
 
 Value-based algorithms, such as Q-learning and SARSA, learn the optimal value function for each state-action pair in the environment. The value function estimates the expected cumulative reward that the agent can achieve by following a certain policy. Once the value function is learned, the policy can be derived by selecting the action with the highest expected cumulative reward in each state. Value-based algorithms update the value function using a temporal-difference (TD) learning approach, where the value of the current state-action pair is updated based on the value of the next state-action pair and the reward obtained.
 
-On the other hand, actor-critic algorithms learn both a policy (actor) and an approximate estimate of the value function (critic). Since the actor-critic learns the policy function directly it is a policy gradient algorithm. The critic network in actor-critic algorithms approximates the value function, which provides an estimate of the expected cumulative reward that the agent can achieve by following the current policy. The policy network (actor) selects actions based on the output of the critic network, which is used to estimate the expected cumulative reward for each action in the current state. The critic network is updated using a TD learning approach, where the estimated value of the current state-action pair is updated based on the estimated value of the next state-action pair and the reward obtained. The policy network (actor) is updated using the gradient of the expected cumulative reward with respect to the policy parameters.
+On the other hand, actor-critic algorithms learn both a policy (actor) and an approximate estimate of the value function (critic). Since the actor-critic learns the policy function directly it is a policy gradient algorithm. The critic network in actor-critic algorithms approximates the value function, which provides an estimate of the expected cumulative reward that the agent can achieve by following the current policy. The policy network (actor) selects actions based on the output of the critic network, which is used to estimate the expected cumulative reward for each action in the current state. The critic network is updated using a TD learning approach, where the estimated value of the current state-action pair is updated based on the estimated value of the next state-action pair and the reward obtained.  \cite{barto1983neuronlike} \cite{NIPS1994_23ce1851}
 
 The key difference between the two approaches is that value-based algorithms only learn the value function, while actor-critic algorithms learn both the value function and the policy. The policy in actor-critic algorithms is updated based on the value function, allowing the agent to balance exploration and exploitation and learn a more optimal policy in complex environments. By learning both the policy and the value function, actor-critic algorithms can achieve better performance and faster convergence than value-based algorithms in many reinforcement learning tasks.
 
 Actor-Critic Algorithm (all policy gradient algorithms for that matter) have the following advantages over value-based.
 \begin{enumerate}
 \item Don't need to use exploration/exploitation trade-offs.
-\item Also helps in solving perpetual aliasing issues.
+\item Also helps in solving perpetual aliasing issues. Where two states may have similar feature representations but require different actions. Traditional DQN and DDQN based algos will end up trapped in such scenarios.
 \end{enumerate}
 
 And the following disadvantages over value-based.
@@ -285,13 +285,9 @@ The episode terminates when any of the following happens: \begin{enumerate}
 \end{enumerate}
 
 \section{Training and Evaluation}
+\subsection{Observations}
+The Training on Cart-Pole was the fastest followed by Lunar-Lander and then Inverted-Pendulum. This can be attributed to the respective complexity of the three environments especially, the Cart-Pole and Lunar Lander having discrete action space while the Inverted Pendulum has a continuous action space.
 
-\subsection{Training Challenges}
-
-\begin{enumerate}
-\item The Actor's gradients can become very large, which can lead to unstable learning and slow convergence. This is because the actor's gradients are proportional to the critic's estimate of the advantage function, which can be very large or small depending on the environment and the current policy. The Solution for this is to use proximal policy optimization (PPO) instead which constrains the policy updates to be within a small range.
-\item The critic's output could have a large variance, this can lead to slow training because the actor updates may be inconsistent and difficult to interpret. The Solution for this could be to use A2C instead.
-\end{enumerate}
 
 \subsection{Results}
 \begin{figure}[H]
@@ -315,9 +311,12 @@ The episode terminates when any of the following happens: \begin{enumerate}
     \caption{Inverted Pendulum Training and Evaluation}
 \end{figure}
 
-\subsection{Conclusion}
-The Training on Cart-Pole was the fastest followed by Lunar-Lander and then Inverted-Pendulum. This can be attributed to the respective complexity of the three environments especially, the Cart-Pole and Lunar Lander having discrete action space while the Inverted Pendulum has a continuous action space.
+\subsection{Training Challenges}
 
+\begin{enumerate}
+\item The Actor's gradients can become very large, which can lead to unstable learning and slow convergence. This is because the actor's gradients are proportional to the critic's estimate of the advantage function, which can be very large or small depending on the environment and the current policy. The Solution for this is to use proximal policy optimization (PPO) instead which constrains the policy updates to be within a small range.
+\item The critic's output could have a large variance, this can lead to slow training because the actor updates may be inconsistent and difficult to interpret. The Solution for this could be to use A2C instead.
+\end{enumerate}
 \section{Bonus - A2C}
 \subsection{Results}
 \begin{figure}[H]
