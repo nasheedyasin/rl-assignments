@@ -19,7 +19,7 @@
 
 
 \author{
-   Sailesh Reddy \\
+   Sailesh Reddy Sirigireddy\\
    Department of Computer Science\\
    University at Buffalo, SUNY\\
    Buffalo, NY 14260 \\
@@ -57,6 +57,8 @@
 
 \section{Q Actor-Critic Algorithm}
 
+As described in \cite{NIPS1994_23ce1851}.
+
 \subsection{Network Architecture}
 The policy(actor) network takes the state as input and outputs probability distributions over the action space. In the case of discrete action space, the value function (critic) net again takes the state as input and outputs estimate the Q value for each action In continuous action space. In the case of continuous action space, however, the value function (critic) net takes the state-action pair as input and outputs the Q value for that particular state-action pair.
 
@@ -69,23 +71,45 @@ The policy(actor) network takes the state as input and outputs probability distr
 
 \begin{figure}[H]
     \begin{center}
-        \includegraphics[width=\textwidth]{contionous.png}
+        \includegraphics[width=\textwidth]{continuous.png}
     \end{center}
     \caption{Networks for Continuous Action Space}
 \end{figure}
 
 \subsection{Choosing Action}
-The policy network takes the current state as input and outputs a probability distribution over actions. The agent chooses an action based on this distribution.
+The policy network takes the current state as input and outputs a probability distribution over actions. The agent chooses an action based on this distribution. 
 
 \subsection{Value Function update}
 The value function network is updated using the Q-learning algorithm, which involves computing the TD error and updating the value estimates for the current state-action pair.
 
 \subsection{Policy update}
-The policy network is updated using the q value function, which involves computing the q value of the chosen action and updating the actor parameters to increase the probability of choosing that action in the future.
+During each iteration of the algorithm, the actor selects an action based on the current state and the policy network. The Q-value of the chosen action is then computed using the critic network, which estimates the expected cumulative reward for taking the chosen action in the current state.
+
+The policy network is then updated using the Q-value function to increase the probability of selecting the chosen action in the future. This is done by computing the gradient of the log probability of the chosen action with respect to the actor parameters and multiplying it by the Q-value. The resulting gradient is used to update the actor parameters using gradient ascent, which increases the probability of selecting the chosen action in the future.
+
+By updating the policy network based on the Q-value function, the actor learns to select actions that are likely to lead to higher cumulative rewards in the future. This allows the algorithm to balance exploration and exploitation, exploring new actions to discover potentially high-reward options while also exploiting actions that have already been found to be effective.
+
+Actor Loss = -1 * (log probability of action)* (TD-Error)
+
+The negative value in the actor loss function is included because the goal of the optimization problem is to maximize the expected cumulative reward over time, which is equivalent to minimizing the negative of the expected cumulative reward. Therefore, the loss function is expressed as a negative quantity that needs to be minimized.
+
+The first term in the actor loss function, which is the negative log-likelihood of the chosen action, is included to encourage the policy network to increase the probability of selecting actions that have higher expected cumulative rewards. By minimizing the negative log-likelihood, the policy network is encouraged to increase the probability of selecting actions that are more likely to lead to higher cumulative rewards.
+
+The second term in the actor loss function, which is the TD-Error of the chosen action, is included to provide information on the value of the chosen action and encourage the policy network to select actions that are likely to lead to higher cumulative rewards. By minimizing the negative of the TD-Error, the policy network is encouraged to select actions that have higher expected cumulative rewards. We have observed that using TD-Error instead of Q-Value here leads to faster convergence. Also, the TD-Error is detached so that it doesn't influence the learning of the value function network.
+
+\subsection{Other Implementation details}
+
+We have chosen to update both the actor and critic networks every timestep of the environment (similar to SGD).
 
 \section{Difference between Actor-Critic and Value-based approximation algorithms}
 
-The main difference between the two approaches is that while value-based algorithms only learn the value function, actor-critic algorithms learn both a policy (actor) and an approximate estimate of the value function (critic) where the policy(actor) is updated based on the value function (critic).
+The main difference between value-based and actor-critic algorithms lies in their approach to learning and updating the policy.
+
+Value-based algorithms, such as Q-learning and SARSA, learn the optimal value function for each state-action pair in the environment. The value function estimates the expected cumulative reward that the agent can achieve by following a certain policy. Once the value function is learned, the policy can be derived by selecting the action with the highest expected cumulative reward in each state. Value-based algorithms update the value function using a temporal-difference (TD) learning approach, where the value of the current state-action pair is updated based on the value of the next state-action pair and the reward obtained.
+
+On the other hand, actor-critic algorithms learn both a policy (actor) and an approximate estimate of the value function (critic). The critic network in actor-critic algorithms approximates the value function, which provides an estimate of the expected cumulative reward that the agent can achieve by following the current policy. The policy network (actor) selects actions based on the output of the critic network, which is used to estimate the expected cumulative reward for each action in the current state. The critic network is updated using a TD learning approach, where the estimated value of the current state-action pair is updated based on the estimated value of the next state-action pair and the reward obtained. The policy network (actor) is updated using the gradient of the expected cumulative reward with respect to the policy parameters.
+
+The key difference between the two approaches is that value-based algorithms only learn the value function, while actor-critic algorithms learn both the value function and the policy. The policy in actor-critic algorithms is updated based on the value function, allowing the agent to balance exploration and exploitation and learn a more optimal policy in complex environments. By learning both the policy and the value function, actor-critic algorithms can achieve better performance and faster convergence than value-based algorithms in many reinforcement learning tasks.
 
 \section{CartPole-v1}
 \label{sec:cart-definition}
@@ -106,8 +130,8 @@ This environment has been visualized in Figure \ref{fig:cartpole-rendering}.
 \end{figure}
 
 \subsection{Action Space}
-The action is an ndarray of shape (1,) that can take on values {0, 1} to indicate the
-direction in which the cart is pushed with a fixed force.
+The action is an array of shape (1,) that can take on values {0, 1} to indicate the
+the direction in which the cart is pushed with a fixed force.
 
 \begin{itemize}
     \item 0: The cart is pushed to the left
@@ -207,7 +231,7 @@ This environment is the cart pole environment based on the work done by Barto, S
 
 \begin{figure}[h]
     \begin{center}
-        \includegraphics[width=\textwidth]{inverted_pendulum.png}
+        \includegraphics[width=0.5\textwidth]{inverted_pendulum.png}
     \end{center}
     \caption{A frame from InvertedPendulum-v4}
     \label{fig:invpendulum-rendering}
@@ -247,8 +271,9 @@ The episode terminates when any of the following happens: \begin{enumerate}
 \item The absolute value of the vertical angle between the pole and the cart is greater than 0.2 radians.
 \end{enumerate}
 
-\section{Training and Evaluation Results}
+\section{Training and Evaluation}
 
+\subsection{Results}
 \begin{figure}[H]
     \begin{center}
         \includegraphics[width=\textwidth]{qac_cartpole.png}
@@ -269,6 +294,48 @@ The episode terminates when any of the following happens: \begin{enumerate}
     \end{center}
     \caption{Inverted Pendulum Training and Evaluation}
 \end{figure}
+
+\subsection{Conclusion}
+The Training on Cart-Pole was the fastest followed by Lunar-Lander and then Inverted-Pendulum. This can be attributed to the respective complexity of the three environments especially, the Cart-Pole and Lunar Lander having discrete action space while the Inverted Pendulum has a continuous action space.
+
+\section{Bonus - A2C}
+\subsection{Results}
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{a2c_cartpole.png}
+    \end{center}
+    \caption{Cart Pole Training and Evaluation}
+\end{figure}
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{a2c_lunar.png}
+    \end{center}
+    \caption{Lunar Lander Training and Evaluation}
+\end{figure}
+
+\begin{figure}[H]
+    \begin{center}
+        \includegraphics[width=\textwidth]{a2c_invpendulum.png}
+    \end{center}
+    \caption{Inverted Pendulum Training and Evaluation}
+\end{figure}
+
+\subsection{Comparision to QAC}
+We have observed that A2C converges much faster than Q Actor-Critic. This can be attributed to A2C updating the policy and the value function in parallel. This can result in faster learning, especially in environments with a small state space and a discrete action space. QAC, on the other hand, required more iterations to converge, particularly in environments with a large state space and a continuous action space such as Lunar Lander and Inverted Pendulum.
+
+\section{Contribution}
+
+\begin{center}
+    \begin{tabular}{cccc}
+        \toprule
+        Team Member & Part & Contribution \\
+        \midrule
+        Sailesh Reddy Sirigireddy & Part I and II & 50 \\
+        Mohammed Nasheed Yasin & Part I and II & 50 \\
+        \bottomrule
+    \end{tabular}
+\end{center}
 
 \printbibliography
 
