@@ -107,9 +107,22 @@ The main difference between value-based and actor-critic algorithms lies in thei
 
 Value-based algorithms, such as Q-learning and SARSA, learn the optimal value function for each state-action pair in the environment. The value function estimates the expected cumulative reward that the agent can achieve by following a certain policy. Once the value function is learned, the policy can be derived by selecting the action with the highest expected cumulative reward in each state. Value-based algorithms update the value function using a temporal-difference (TD) learning approach, where the value of the current state-action pair is updated based on the value of the next state-action pair and the reward obtained.
 
-On the other hand, actor-critic algorithms learn both a policy (actor) and an approximate estimate of the value function (critic). The critic network in actor-critic algorithms approximates the value function, which provides an estimate of the expected cumulative reward that the agent can achieve by following the current policy. The policy network (actor) selects actions based on the output of the critic network, which is used to estimate the expected cumulative reward for each action in the current state. The critic network is updated using a TD learning approach, where the estimated value of the current state-action pair is updated based on the estimated value of the next state-action pair and the reward obtained. The policy network (actor) is updated using the gradient of the expected cumulative reward with respect to the policy parameters.
+On the other hand, actor-critic algorithms learn both a policy (actor) and an approximate estimate of the value function (critic). Since the actor-critic learns the policy function directly it is a policy gradient algorithm. The critic network in actor-critic algorithms approximates the value function, which provides an estimate of the expected cumulative reward that the agent can achieve by following the current policy. The policy network (actor) selects actions based on the output of the critic network, which is used to estimate the expected cumulative reward for each action in the current state. The critic network is updated using a TD learning approach, where the estimated value of the current state-action pair is updated based on the estimated value of the next state-action pair and the reward obtained. The policy network (actor) is updated using the gradient of the expected cumulative reward with respect to the policy parameters.
 
 The key difference between the two approaches is that value-based algorithms only learn the value function, while actor-critic algorithms learn both the value function and the policy. The policy in actor-critic algorithms is updated based on the value function, allowing the agent to balance exploration and exploitation and learn a more optimal policy in complex environments. By learning both the policy and the value function, actor-critic algorithms can achieve better performance and faster convergence than value-based algorithms in many reinforcement learning tasks.
+
+Actor-Critic Algorithm (all policy gradient algorithms for that matter) have the following advantages over value-based.
+\begin{enumerate}
+\item Don't need to use exploration/exploitation trade-offs.
+\item Also helps in solving perpetual aliasing issues.
+\end{enumerate}
+
+And the following disadvantages over value-based.
+\begin{enumerate}
+\item They frequently converge to local maxima instead of a global maximum.
+\item They are inefficient and generally take much longer to train.
+\item They also have high variance.
+\end{enumerate}
 
 \section{CartPole-v1}
 \label{sec:cart-definition}
@@ -330,6 +343,14 @@ The Training on Cart-Pole was the fastest followed by Lunar-Lander and then Inve
 
 \subsection{Comparision to QAC}
 We have observed that A2C converges much faster than Q Actor-Critic. This can be attributed to A2C updating the policy and the value function in parallel. This can result in faster learning, especially in environments with a small state space and a discrete action space. QAC, on the other hand, required more iterations to converge, particularly in environments with a large state space and a continuous action space such as Lunar Lander and Inverted Pendulum.
+
+A2C has several advantages over Q Actor-Critic.
+
+\begin{enumerate}
+\item A2C can be more computationally efficient than QAC since it requires fewer function evaluations per update. This is because A2C uses only one network to estimate both the policy and value function, while QAC uses separate networks to estimate the value function and state-action value function.
+\item A2C tends to converge faster than QAC due to its more accurate estimation of the advantage function. The advantage function in A2C is estimated using the difference between the value function and the state-action value function, which provides a better estimate of the advantage than the difference between the state-action value function and the estimated value of the next state used in QAC.
+\item A2C has a lower variance in the policy updates compared to QAC, which can lead to more stable and consistent learning. This is because A2C uses a Monte Carlo estimate of the advantage function, which can have a lower variance than the bootstrapped estimate used in QAC.
+\end{enumerate}
 
 \section{Contribution}
 
