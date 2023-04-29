@@ -273,6 +273,13 @@ The episode terminates when any of the following happens: \begin{enumerate}
 
 \section{Training and Evaluation}
 
+\subsection{Training Challenges}
+
+\begin{enumerate}
+\item The Actor's gradients can become very large, which can lead to unstable learning and slow convergence. This is because the actor's gradients are proportional to the critic's estimate of the advantage function, which can be very large or small depending on the environment and the current policy. The Solution for this is to use proximal policy optimization (PPO) instead which constrains the policy updates to be within a small range.
+\item The critic's output could have a large variance, this can lead to slow training because the actor updates may be inconsistent and difficult to interpret. The Solution for this could be to use A2C instead.
+\end{enumerate}
+
 \subsection{Results}
 \begin{figure}[H]
     \begin{center}
