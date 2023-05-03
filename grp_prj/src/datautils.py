@@ -9,10 +9,12 @@ from transformers import AutoTokenizer, BatchEncoding, pipeline
 from torch.utils.data import DataLoader, Dataset
 from convokit import Corpus, Conversation, download
 from sklearn.model_selection import train_test_split
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Literal, Optional, Sequence, Tuple
 
 
 random.seed(10)
+
+ROLES = ('persuader', 'persuadee', 'both')
 
 class DialogDataset(Dataset):
     def __init__(
@@ -20,12 +22,25 @@ class DialogDataset(Dataset):
         convos: List[Conversation],
         tokenizer: AutoTokenizer,
         purpose_text: str = "",
-        is_pursuader: bool = True,
+        role:  Literal['both', 'persuader', 'persuadee'] = 'both',
         shuffle: bool = False,
         max_length=768
-    ):
+    ):        
+        """
+        Args:
+            tokenizer (AutoTokenizer): The `Transformers` tokenizer
+            to be used.
+            purpose_text (str): Add some purpose information to the head of every
+            conversation. Defaults to "".
+            role (bool): Are you generating data to train the persuader or persuadee?
+            Defaults to 'persuader'.
+        
+        Note:
+        Ensure the first value in tokenizer's special_tokens_map['additional_special_tokens']
+        is the persuader and the second the persuadee. Also ensure there are only 2 values.
+        """
         self.tokenizer: AutoTokenizer = tokenizer
-        self.is_pursuader = is_pursuader
+        self.role = role
         self.purpose_text = purpose_text
         self.max_length = max_length
 
@@ -72,8 +87,8 @@ class DialogDataset(Dataset):
         batch_encodings: List[BatchEncoding] = list()
         for utt in convo.iter_utterances():
             # If the utterance is for the role in question 
-            if (self.is_pursuader and utt.meta['role']==0) or \
-                (not self.is_pursuader and utt.meta['role']==1):
+            if self.role == 'both' or (self.role=='persuader' and utt.meta['role']==0) or \
+                (self.role=='persuadee' and utt.meta['role']==1):
 
                 formatted_utterance = f"{utt.text}{self.tokenizer.eos_token}"
                 tokenized_utt = self.tokenizer(
@@ -94,8 +109,8 @@ class DialogDataset(Dataset):
                     tokenized_utt[key] = tokenized_utt[key][truncation_length: ]
 
             # Update the base and data returning
-            if (self.is_pursuader and utt.meta['role']==0) or \
-                (not self.is_pursuader and utt.meta['role']==1):
+            if self.role == 'both' or (self.role=='persuader' and utt.meta['role']==0) or \
+                (self.role=='persuadee' and utt.meta['role']==1):
 
                 # Append the utterance    
                 ids.append(utt.id)
@@ -135,12 +150,6 @@ class DialogBatcher:
         Args:
             tokenizer (AutoTokenizer): The `Transformers` tokenizer
             to be used.
-            purpose_text (str): Add some purpose information to the head of every
-            conversation. Defaults to "".
-            needs_targets (bool): Do labels have to be generated?
-            Defaults to True.
-            is_pursuader (bool): Are you generating data to train the persuader?
-            Defaults to True.
         
         Note:
         Ensure the first value in tokenizer's special_tokens_map['additional_special_tokens']
@@ -186,8 +195,7 @@ class DialogDataModule(pl.LightningDataModule):
         batcher: DialogBatcher,
         batch_size: int = 16,
         split_data: bool = True, *,
-        purpose_text: str = "",
-        is_pursuader: bool = True
+        purpose_text: str = ""
     ):
         """
         Args:
@@ -198,9 +206,10 @@ class DialogDataModule(pl.LightningDataModule):
                 Eval mode: Only the test set will be used.
                 Train mode: Only the train set will be used. This train set will be further
                 divided into train and validation sets.
+            purpose_text (str): Add some purpose information to the head of every
+            conversation. Defaults to "".
         """
         super().__init__()
-        self.is_pursuader = is_pursuader
         self.purpose_text = purpose_text
 
         if os.path.exists(data):
@@ -245,7 +254,6 @@ class DialogDataModule(pl.LightningDataModule):
             self.train_dataset = DialogDataset(
                 cnv_train,
                 self.batcher.tokenizer,
-                is_pursuader = self.is_pursuader,
                 purpose_text = self.purpose_text,
                 shuffle=True
             )
@@ -253,7 +261,6 @@ class DialogDataModule(pl.LightningDataModule):
             self.val_dataset = DialogDataset(
                 cnv_val,
                 self.batcher.tokenizer,
-                is_pursuader = self.is_pursuader,
                 purpose_text = self.purpose_text
             )
 
@@ -268,7 +275,6 @@ class DialogDataModule(pl.LightningDataModule):
             self.test_dataset = DialogDataset(
                 convs,
                 self.batcher.tokenizer,
-                is_pursuader = self.is_pursuader,
                 purpose_text = self.purpose_text
             )
 
@@ -276,7 +282,6 @@ class DialogDataModule(pl.LightningDataModule):
             self.pred_dataset = DialogDataset(
                 convs,
                 self.batcher.tokenizer,
-                is_pursuader = self.is_pursuader,
                 purpose_text = self.purpose_text
             )
 
