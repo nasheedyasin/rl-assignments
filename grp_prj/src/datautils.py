@@ -409,6 +409,7 @@ class PersuationSchemeDataModule(pl.LightningDataModule):
         self,
         data: str, /,
         batcher: PersuationSchemeBatcher,
+        label2id: Optional[Dict[str, int]] = None,
         batch_size: int = 16,
         split_data: bool = True
     ):
@@ -421,8 +422,6 @@ class PersuationSchemeDataModule(pl.LightningDataModule):
                 Eval mode: Only the test set will be used.
                 Train mode: Only the train set will be used. This train set will be further
                 divided into train and validation sets.
-            purpose_text (str): Add some purpose information to the head of every
-            conversation. Defaults to "".
         """
         super().__init__()
         if os.path.exists(data):
@@ -431,6 +430,7 @@ class PersuationSchemeDataModule(pl.LightningDataModule):
             self.data_path = download(data)
 
         self.batcher = batcher
+        self.label2id = label2id
         self.batch_size = batch_size
         self.split_data = split_data
 
@@ -449,6 +449,13 @@ class PersuationSchemeDataModule(pl.LightningDataModule):
         utterances = [utt for utt in corpus.iter_utterances()\
             if isinstance(utt.meta['label_1'], list)]
 
+        # Infer the `label2id` if not given.
+        if self.label2id is None:
+            labels = set()
+            for utts in utterances: labels.update(utts.meta['label_1'])
+            self.label2id = {label: idx for idx, label in enumerate(labels)}
+
+
         if stage == "fit" or stage is None:
             utt_train, utt_val = train_test_split(
                 utterances,
@@ -466,17 +473,15 @@ class PersuationSchemeDataModule(pl.LightningDataModule):
                 )
 
             # Train Dataset
-            self.train_dataset = DialogDataset(
+            self.train_dataset = PersuationSchemeDataset(
                 utt_train,
-                self.batcher.tokenizer,
-                purpose_text = self.purpose_text,
+                self.label2id,
                 shuffle=True
             )
             # Validation Dataset
-            self.val_dataset = DialogDataset(
+            self.val_dataset = PersuationSchemeDataset(
                 utt_val,
-                self.batcher.tokenizer,
-                purpose_text = self.purpose_text
+                self.label2id,
             )
 
         if stage == "test" or stage is None:
@@ -487,17 +492,15 @@ class PersuationSchemeDataModule(pl.LightningDataModule):
                     random_state=44
                 )
 
-            self.test_dataset = DialogDataset(
+            self.test_dataset = PersuationSchemeDataset(
                 utterances,
-                self.batcher.tokenizer,
-                purpose_text = self.purpose_text
+                self.label2id,
             )
 
         if stage == "predict" or stage is None:
-            self.pred_dataset = DialogDataset(
+            self.pred_dataset = PersuationSchemeDataset(
                 utterances,
-                self.batcher.tokenizer,
-                purpose_text = self.purpose_text
+                self.label2id,
             )
 
     def train_dataloader(self):
