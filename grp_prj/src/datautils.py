@@ -360,7 +360,7 @@ class PersuationSchemeDataset(Dataset):
         # Get and convert the persuasion scheme labels
         utt_labels: List[int] = list()
         for idx in range(len(self.id2label)):
-            utt_labels.append(int(self.id2label[idx] in utterance.meta['label_1']))
+            utt_labels.append(float(self.id2label[idx] in utterance.meta['label_1']))
 
         return utterance.id, utterance.text, utt_labels
 
