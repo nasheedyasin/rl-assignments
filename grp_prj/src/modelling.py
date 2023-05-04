@@ -176,7 +176,7 @@ class PersuasionSchemeClassifier(pl.LightningModule):
         # Weighted loss to increase recall
         num_pos = (labels > 0).sum(dim=0)
         num_neg = labels.size(0) - num_pos
-        pos_weight = num_neg / (2*(num_pos+1))
+        pos_weight = num_neg / (num_pos+1)
         loss = F.binary_cross_entropy_with_logits(
             output.logits,
             labels,
