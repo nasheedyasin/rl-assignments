@@ -171,15 +171,27 @@ class PersuasionSchemeClassifier(pl.LightningModule):
         ids, text_tokens = batch
         output = self(text_tokens)
 
+        labels = text_tokens['labels'].to(self.device)
+
+        # Weighted loss to increase recall
+        num_pos = (labels > 0).sum(dim=0)
+        num_neg = labels.size(0) - num_pos
+        pos_weight = num_neg/(num_pos+1)
+        loss = F.binary_cross_entropy_with_logits(
+            output.logits,
+            labels,
+            pos_weight=pos_weight
+        )
+
         # Compute the metrics
         granular_metric = MultilabelF1Score(num_labels=self.num_labels, average=None).to(self.device)
         overall_metric = MultilabelF1Score(num_labels=self.num_labels, average='micro').to(self.device)
         macro_metric = MultilabelF1Score(num_labels=self.num_labels).to(self.device)
-        reshaped_targets = text_tokens['labels'].to(self.device)
+        reshaped_targets = labels
         pred_labels = output.logits.sigmoid()
 
         return {
-            'loss': output.loss,
+            'loss': loss,
             'overall_f1_score': overall_metric(
                 pred_labels,
                 reshaped_targets
