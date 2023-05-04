@@ -7,9 +7,9 @@ from tqdm import tqdm
 from copy import deepcopy
 from transformers import AutoTokenizer, BatchEncoding, pipeline
 from torch.utils.data import DataLoader, Dataset
-from convokit import Corpus, Conversation, download
+from convokit import Corpus, Conversation, Utterance, download
 from sklearn.model_selection import train_test_split
-from typing import List, Literal, Optional, Sequence, Tuple
+from typing import Dict, List, Literal, Optional, Sequence, Tuple
 
 
 random.seed(10)
@@ -281,6 +281,221 @@ class DialogDataModule(pl.LightningDataModule):
         if stage == "predict" or stage is None:
             self.pred_dataset = DialogDataset(
                 convs,
+                self.batcher.tokenizer,
+                purpose_text = self.purpose_text
+            )
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            collate_fn=self.batcher,
+            shuffle=True
+        )
+    def val_dataloader(self):
+        return DataLoader(
+            self.val_dataset,
+            batch_size=self.batch_size,
+            collate_fn=self.batcher
+        )
+
+    def test_dataloader(self):
+        return DataLoader(
+            self.test_dataset,
+            batch_size=self.batch_size,
+            collate_fn=self.batcher
+        )
+
+    def predict_dataloader(self):
+        return DataLoader(
+            self.pred_dataset,
+            batch_size=self.batch_size,
+            collate_fn=self.batcher
+        )
+
+
+class PersuationSchemeDataset(Dataset):
+    def __init__(
+        self,
+        raw_utterances: List[Utterance],
+        label2id: Dict[str, int],
+        shuffle: bool = False
+    ):        
+        """
+        Args:
+            label2id (Dict[str, int]): The mapping of labels to integer values.
+        """
+        self.id2label = {v: k for k, v in label2id.items()}
+
+        self.ids: List[str] = list()
+        self.utterances: List[str] = list()
+        self.labels: List[List[int]] =  list()
+        # Get the utterances
+        for utt in tqdm(raw_utterances, desc='Building the Utterance Labels'):
+            id, utt_text, labels = self._build_sample(utt)
+
+            self.ids.append(id)
+            self.utterances.append(utt_text)
+            self.labels.append(labels)
+
+        # Shuffle the utterances
+        if shuffle:
+            _temp = list(zip(self.ids, self.utterances, self.labels))
+            random.shuffle(_temp)
+
+            self.ids, self.utterances, self.labels = zip(*_temp)
+
+    def __len__(self):
+        return len(self.utterances)
+
+    def _build_sample(
+        self,
+        utterance: Utterance,
+    ) -> Tuple[str, str, List[int]]:
+        """Generates samples for the conversation by concatenating history to each
+        utterance. Further we use the `self.is_persuader` flag to generate appropriate
+        persuader or persuadee finetuning data.
+        Note: 
+        """
+        # Get and convert the persuasion scheme labels
+        utt_labels: List[int] = list()
+        for idx in range(len(self.id2label)):
+            utt_labels.append(int(self.id2label[idx] in utterance.meta['label_1']))
+
+        return utterance.id, utterance.text, utt_labels
+
+    def __getitem__(self, index) -> Tuple[int, str, List[int]]:
+        return self.ids[index], self.utterances[index], self.labels[index]
+
+
+class PersuationSchemeBatcher:
+    def __init__(
+        self,
+        tokenizer: AutoTokenizer,
+        has_targets: bool = True
+    ):
+        """
+        Args:
+            tokenizer (AutoTokenizer): The HF tokenizer class to be used.
+            has_targets (bool): Does the dataset have target information.
+            Defaults to True.
+            concat_title_and_generation (bool): Whether to concatenate the title
+            to the generation. Could be useful for non-autoregressive models.
+        """
+        self.has_targets = has_targets
+        self.tokenizer = tokenizer
+
+    def __call__(self, batch: Sequence):
+        """Use this function as the `collate_fn`.
+        """
+        ids, utterances, labels = zip(*batch)
+
+        tokenized_utterances = self.tokenizer(
+            utterances,
+            truncation=True,
+            padding=True
+        )
+        if self.has_targets:
+            tokenized_utterances['labels'] = labels
+
+        # Tensorify
+        tokenized_utterances.convert_to_tensors('pt')
+
+        return ids, tokenized_utterances
+
+
+class PersuationSchemeDataModule(pl.LightningDataModule):
+    def __init__(
+        self,
+        data: str, /,
+        batcher: PersuationSchemeBatcher,
+        batch_size: int = 16,
+        split_data: bool = True
+    ):
+        """
+        Args:
+            data (str): path to or name of the dataset.
+            batcher (SynBatcher): Custom data batching logic.
+            split_data (bool): Whether or not to split the data into train and test
+            sets.
+                Eval mode: Only the test set will be used.
+                Train mode: Only the train set will be used. This train set will be further
+                divided into train and validation sets.
+            purpose_text (str): Add some purpose information to the head of every
+            conversation. Defaults to "".
+        """
+        super().__init__()
+        if os.path.exists(data):
+            self.data_path = data
+        else:
+            self.data_path = download(data)
+
+        self.batcher = batcher
+        self.batch_size = batch_size
+        self.split_data = split_data
+
+    def setup(
+        self,
+        stage: Optional[str] = None,
+        train_fraction: float = 0.75
+    ) -> None:
+        """Read in the data csv file and perform splitting here.
+        Args:
+            train_fraction (float): Fraction of the conversations to use
+            as training data.
+        """
+        corpus = Corpus(filename=self.data_path)
+        # Only consider utterances with the Persuation Scheme labelled
+        utterances = [utt for utt in corpus.iter_utterances()\
+            if isinstance(utt.meta['label_1'], list)]
+
+        if stage == "fit" or stage is None:
+            utt_train, utt_val = train_test_split(
+                utterances,
+                train_size=train_fraction,
+                random_state=44
+            )
+
+            # Split the train set again into train and validation if test
+            # dataset creation was required.
+            if self.split_data:
+                utt_train, utt_val = train_test_split(
+                    utt_train,
+                    train_size=train_fraction,
+                    random_state=44
+                )
+
+            # Train Dataset
+            self.train_dataset = DialogDataset(
+                utt_train,
+                self.batcher.tokenizer,
+                purpose_text = self.purpose_text,
+                shuffle=True
+            )
+            # Validation Dataset
+            self.val_dataset = DialogDataset(
+                utt_val,
+                self.batcher.tokenizer,
+                purpose_text = self.purpose_text
+            )
+
+        if stage == "test" or stage is None:
+            if self.split_data:
+                _, utterances = train_test_split(
+                    utterances,
+                    train_size=train_fraction,
+                    random_state=44
+                )
+
+            self.test_dataset = DialogDataset(
+                utterances,
+                self.batcher.tokenizer,
+                purpose_text = self.purpose_text
+            )
+
+        if stage == "predict" or stage is None:
+            self.pred_dataset = DialogDataset(
+                utterances,
                 self.batcher.tokenizer,
                 purpose_text = self.purpose_text
             )
