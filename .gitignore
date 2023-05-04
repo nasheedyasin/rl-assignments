@@ -133,6 +133,9 @@ dmypy.json
 a1/assets
 a2/images
 grp_prj/data
+grp_prj/models
+grp_prj/src/__pycache__
+grp_prj/src/lightning_logs
 *.aux
 *.fdb_latexmk
 *.fls
@@ -149,3 +152,5 @@ a1/report/report1.run.xml
 *.bcf
 *.bbl
 *.pickle
+*.ckpt
+*.pth
