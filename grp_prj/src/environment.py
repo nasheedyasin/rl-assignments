@@ -33,10 +33,10 @@ class PersuasionEnvironment(gym.Env):
         self.render_mode = render_mode
 
         self.observation_space = gym.spaces.Text(
-            2**13, charset=string.digits+string.ascii_letters+string.punctuation
+            2**13, charset=string.digits+string.ascii_letters+string.punctuation+' '
         )
         self.action_space = gym.spaces.Text(
-            2**13, charset=string.digits+string.ascii_letters+string.punctuation
+            2**13, charset=string.digits+string.ascii_letters+string.punctuation+' '
         )
 
         # We truncate from the left to keep latest context intact
@@ -54,8 +54,8 @@ class PersuasionEnvironment(gym.Env):
         self.gold_persuader_utts: List[Utterance] = list()
         self.gold_persuadee_utts: List[Utterance] = list()
         for utt in conervsation.iter_utterances():
-            if utt.meta['role'] == 0: self.gold_persuader_utts.append[utt]
-            else: self.gold_persuadee_utts.append[utt]
+            if utt.meta['role'] == 0: self.gold_persuader_utts.append(utt)
+            else: self.gold_persuadee_utts.append(utt)
 
         self.max_turns = len(self.gold_persuader_utts)
 
@@ -67,8 +67,8 @@ class PersuasionEnvironment(gym.Env):
         super().reset(seed=seed, options=options)
 
         # Initialize the env state
-        self.state = f'{self.tokenizer.bos_token} {self.purpose_text} "\
-            "{self.role_markers[0]}'
+        self.state = f'{self.tokenizer.bos_token} {self.purpose_text} '\
+            f'{self.role_markers[0]}'
 
         self.turn = 0
         self.action_t_minus_1 = ""
@@ -84,10 +84,10 @@ class PersuasionEnvironment(gym.Env):
         # We keep track of the true state seperately
         # Otherwise, since we are doing imitation learning, we doctor the state to
         # resemble gold conversation history/trajectory
-        gold_action = self.gold_persuader_utts[self.turn]
-        gold_response = self.gold_persuadee_utts[self.turn]
-        self.state = f'{self.state} {gold_action} "\
-            "{self.role_markers[1]} {gold_response} {self.role_markers[0]}'
+        gold_action = self.gold_persuader_utts[self.turn].text
+        gold_response = self.gold_persuadee_utts[self.turn].text
+        self.state = f'{self.state} {gold_action} '\
+            f'{self.role_markers[1]} {gold_response} {self.role_markers[0]}'
 
         true_state = f'{self.state} {action} {self.role_markers[1]}'
 
@@ -101,7 +101,7 @@ class PersuasionEnvironment(gym.Env):
             gold_action
         )
 
-        reward = self.reward_module.predict_step(batch)
+        reward = self.reward_module.predict_step(batch).item()
 
         # While sanity testing we just pick up the golden persuadee
         # utterance for the time step
@@ -133,8 +133,8 @@ class PersuasionEnvironment(gym.Env):
         # Proceed with the next step
         self.turn += 1
 
-        if self.turn == self.max_turns:
-            terminated = truncated = True
+        if self.turn == self.max_turns: terminated = truncated = True
+        else: terminated = truncated = False
 
         return (
             self.state, reward,
