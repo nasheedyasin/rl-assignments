@@ -168,6 +168,6 @@ class PersuasionEnvironment(gym.Env):
         )
 
         delimiter_pattern = "|".join(map(re.escape, self.role_markers))
-        result = re.findall(f'(.*?{delimiter_pattern}.*)', string)
+        result = re.findall(f'(.*?{delimiter_pattern}.*)', state)
 
         print(*result, sep='\n')
