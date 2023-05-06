@@ -85,7 +85,9 @@ class PersuasionEnvironment(gym.Env):
         # Otherwise, since we are doing imitation learning, we doctor the state to
         # resemble gold conversation history/trajectory
         gold_action = self.gold_persuader_utts[self.turn].text
-        gold_response = self.gold_persuadee_utts[self.turn].text
+        # Sometimes on the last turn, the pursuadee does not reply
+        if self.turn == len(self.gold_persuadee_utts): gold_response = ""
+        else: gold_response = self.gold_persuadee_utts[self.turn].text
         true_state = f'{self.state} {action} {self.role_markers[1]}'
 
         self.state = f'{self.state} {gold_action} '\
