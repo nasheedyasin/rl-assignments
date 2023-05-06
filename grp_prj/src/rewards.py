@@ -74,7 +74,7 @@ class PersuasionRewards(pl.LightningModule):
         gold_max, gold_argmax = gold_log_probs.max(dim=-1)
         curr_gen_max = curr_gen_log_probs.gather(-1, gold_argmax.unsqueeze(-1)).squeeze()
 
-        emo_reward = torch.clip((curr_gen_max - gold_max).exp(),max=1)
+        emo_reward = torch.clip((curr_gen_max - gold_max).exp(),max=1).cpu()
 
         # Calculate persuasion reward (range: 0-1)
         # Calculated as the cosine similarity bewteen the generated reponses's label tensor
@@ -83,7 +83,7 @@ class PersuasionRewards(pl.LightningModule):
             curr_gen_per_logits.sigmoid(),
             gold_per_logits.sigmoid(),
             dim=-1
-        )
+        ).cpu()
 
         unweighted_reward_tensor = torch.stack(
             [-rep_reward, const_reward, emo_reward, per_reward], dim=-1
