@@ -86,10 +86,10 @@ class PersuasionEnvironment(gym.Env):
         # resemble gold conversation history/trajectory
         gold_action = self.gold_persuader_utts[self.turn].text
         gold_response = self.gold_persuadee_utts[self.turn].text
-        self.state = f'{self.state} {gold_action} '\
-            f'{self.role_markers[1]} {gold_response} {self.role_markers[0]}'
-
         true_state = f'{self.state} {action} {self.role_markers[1]}'
+
+        self.state = f'{self.state} {gold_action} '\
+            f'{self.role_markers[1]} {gold_response} {self.role_markers[0]}'        
 
         # While sanity testing we pass the same text for both
         # action and gold response
