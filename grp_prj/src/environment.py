@@ -134,6 +134,7 @@ class PersuasionEnvironment(gym.Env):
             true_state = f'{true_state} {self.role_markers[0]}'
 
         # Proceed with the next step
+        self.action_t_minus_1 = action
         self.turn += 1
 
         if self.turn == self.max_turns: terminated = truncated = True
@@ -163,7 +164,7 @@ class PersuasionEnvironment(gym.Env):
 
         # Skip the first token (`bos`)
         state = self.tokenizer.decode(
-            self.tokenizer(state, truncation=False)['input_ids'][1:]
+            self.tokenizer(self.state, truncation=False)['input_ids'][1:]
         )
 
         delimiter_pattern = "|".join(map(re.escape, self.role_markers))
