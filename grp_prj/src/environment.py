@@ -122,12 +122,13 @@ class PersuasionEnvironment(gym.Env):
                 # We use contrastive sampling
                 # refer https://huggingface.co/blog/introducing-csearch
                 true_state_ids = self.human_proxy.generate(
+                    **prompt_ids,
                     penalty_alpha=0.6,
                     top_k=4, max_new_tokens=128
                 )
 
             # The `eos` token is the last `input_id` and we want to skip that.
-            true_state = self.tokenizer.decode(true_state_ids[:-1])
+            true_state = self.tokenizer.decode(true_state_ids[0][:-1])
             true_state = f'{true_state} {self.role_markers[0]}'
 
         # Proceed with the next step
