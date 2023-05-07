@@ -91,7 +91,12 @@ class PersuasionEnvironment(gym.Env):
         true_state = f'{self.state} {action} {self.role_markers[1]}'
 
         self.state = f'{self.state} {gold_action} '\
-            f'{self.role_markers[1]} {gold_response} {self.role_markers[0]}'        
+            f'{self.role_markers[1]} {gold_response} {self.role_markers[0]}'
+
+        # Truncating the state to be at most 'max_length'
+        state_ids = self.tokenizer.convert_tokens_to_ids(
+            self.tokenizer.tokenize(self.state))[0]
+        self.state = self.tokenizer.decode(state_ids)
 
         # While sanity testing we pass the same text for both
         # action and gold response
@@ -129,6 +134,13 @@ class PersuasionEnvironment(gym.Env):
                     top_k=4, max_new_tokens=128
                 )
 
+            # Truncating the true_state to be at most `max_length`
+            true_state_len = len(true_state_ids[0])
+            true_state_ids = self.tokenizer.truncate_sequences(
+                true_state_ids,
+                num_tokens_to_remove=true_state_len-self.max_length
+            )[0]
+
             # The `eos` token is the last `input_id` and we want to skip that.
             true_state = self.tokenizer.decode(true_state_ids[0][:-1])
             true_state = f'{true_state} {self.role_markers[0]}'
@@ -162,12 +174,7 @@ class PersuasionEnvironment(gym.Env):
             else:
                 os.system('clear')
 
-        # Skip the first token (`bos`)
-        state = self.tokenizer.decode(
-            self.tokenizer(self.state, truncation=False)['input_ids'][1:]
-        )
-
         delimiter_pattern = "|".join(map(re.escape, self.role_markers))
-        result = re.findall(f'(.*?{delimiter_pattern}.*)', state)
+        result = re.findall(f'(.*?{delimiter_pattern}.*)', self.state)
 
         print(*result, sep='\n')
