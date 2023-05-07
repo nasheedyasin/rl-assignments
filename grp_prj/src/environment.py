@@ -95,7 +95,11 @@ class PersuasionEnvironment(gym.Env):
 
         # Truncating the state to be at most 'max_length'
         state_ids = self.tokenizer.convert_tokens_to_ids(
-            self.tokenizer.tokenize(self.state))[0]
+            self.tokenizer.tokenize(self.state))
+        state_ids = self.tokenizer.truncate_sequences(
+            state_ids,
+            num_tokens_to_remove=len(state_ids)-self.max_length
+        )
         self.state = self.tokenizer.decode(state_ids)
 
         # While sanity testing we pass the same text for both
