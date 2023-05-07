@@ -99,7 +99,7 @@ class PersuasionEnvironment(gym.Env):
         state_ids = self.tokenizer.truncate_sequences(
             state_ids,
             num_tokens_to_remove=len(state_ids)-self.max_length
-        )
+        )[0]
         self.state = self.tokenizer.decode(state_ids)
 
         # While sanity testing we pass the same text for both
