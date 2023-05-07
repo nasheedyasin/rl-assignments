@@ -2,8 +2,10 @@ import torch
 import pytorch_lightning as pl
 
 from typing import Dict
+from collections import OrderedDict
 from torch.nn import functional as F
 from torchmetrics.classification import MultilabelF1Score
+from transformers.activations import NewGELUActivation
 from transformers import AutoModelForCausalLM, AutoModelForSequenceClassification
 
 
@@ -24,6 +26,8 @@ class DialogAgent(pl.LightningModule):
             Defaults to 1e-4.
             embedding_size (int, optional): Length of the tokenizer (len(tokenizer)).
             Use this arg if spl tokens have been added to the tokenizer.
+        NOTE:
+            - Ensure that `padding_side` is `'right'`.
         """
         super().__init__()
         self.lr = lr
@@ -43,6 +47,15 @@ class DialogAgent(pl.LightningModule):
         if not self.clm.config.pad_token_id:
             self.clm.config.pad_token_id = \
                 self.clm.config.eos_token_id
+
+        # Create the value head network
+        hidden_size = self.clm.config.n_embd
+        self.value_head = torch.nn.Sequential(OrderedDict([
+          ('lin1', torch.nn.Linear(hidden_size, int(hidden_size/4))),
+          ('act', NewGELUActivation()), # Stateless, has no params
+          ('val_dropout', torch.nn.Dropout(p=.1)),
+          ('lin2', torch.nn.Linear(hidden_size/4, 1))
+        ]))
 
         # Save the init arguments
         self.save_hyperparameters()
@@ -87,20 +100,63 @@ class DialogAgent(pl.LightningModule):
             self.log("test_" + k, v.item(), prog_bar=True)
 
 
-    def predict_step(self, batch, batch_idx):
+    @torch.no_grad()
+    def predict_step(self, batch, batch_idx, output_scores: bool = False):
         ids, text_tokens = batch
+        text_tokens = {k: v.to(self.device) for k, v in text_tokens.items()}
 
-        with torch.no_grad():
-            output = self.clm.generate(
-                text_tokens['input_ids'],
-                max_length=1000
-            )
+        outputs = self.clm.generate(
+            **text_tokens,
+            penalty_alpha=0.6,
+            top_k=4, max_new_tokens=128,
+            return_dict_in_generate=True,
+            output_scores=output_scores
+        )
 
-        return ids, output
+        return ids, (outputs.sequences, outputs.scores)
+
+    # Adapted from https://github.com/huggingface/transformers/blob/04ab5605fbb4ef207b10bf2772d88c53fc242e83/src/transformers/models/gpt2/modeling_gpt2.py#L1448
+    def _get_sequence_length(self, sequence):
+        pad_token_id = self.clm.config.pad_token_id
+
+        return (
+            torch.ne(
+                sequence,
+                pad_token_id
+            ).sum(-1) - 1
+        ).to(self.device)
+
+    @torch.no_grad()
+    def get_action(self, state_tokens):
+        pad_token_id = self.clm.config.pad_token_id
+        _, (action_ids, action_scores) = self.predict_step(
+            (None, state_tokens),
+            None, output_scores=True
+        )
+
+        # Get only the generated token_ids
+        input_len = state_tokens.input_ids.size(1)
+        action_ids = action_ids[:, input_len:]
+
+        # Calc the log_probs
+        per_token_log_prob = self.clm.compute_transition_scores(
+            action_ids, action_scores, normalize_logits=True
+        )
+
+        non_padding_mask =  torch.ne(action_ids, pad_token_id)
+        action_log_prob = (per_token_log_prob*non_padding_mask).sum(dim=-1)
+
+        return action_ids, action_log_prob
 
     def configure_optimizers(self):
         param_dicts = [
-            {"params": self.parameters()}
+            {"params": self.clm.parameters()},
+            {
+                "params": self.value_head.parameters(),
+                # Use a higher LR for the value head as it has to be
+                # learnt from scratch
+                "lr": self.lr * 1e2
+            }
         ]
 
         optimizer = torch.optim.AdamW(
