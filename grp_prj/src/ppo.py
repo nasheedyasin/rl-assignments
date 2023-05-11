@@ -224,60 +224,48 @@ class PPOTrainer(object):
                 value_loss.backward()
                 self.optimizer.step()
 
-    def evaluate(self):
-        epoch_iterator = trange(self.num_epochs, desc='Evaluation Epoch:')
-        
-        for epoch in epoch_iterator:
-            # Shuffle the episodes
-            random.shuffle(self.episodes)
-            step_iterator = trange(
-                start=0,
-                stop=len(self.episodes),
-                step=self.batch_size,
-                desc='Training Step:',
-                leave=False
+    def evaluate(self, num_episodes):
+        episodes = self.episodes[: num_episodes]
+        ep_iterator = tqdm(episodes, desc='Evaluation Episode:')
+
+        for episode in ep_iterator:
+            episode_reward = 0
+            env = PersuasionEnvironment(
+                episode,
+                self.human_proxy,
+                self.env_tokenizer,
+                self.rewards_module,
+                self.purpose_text,
+                render_mode='human'
             )
 
-            for step in step_iterator:
-                step_episodes = self.episodes[step: step+self.batch_size]
-                for episode in step_episodes:
-                    episode_reward = 0
-                    env = PersuasionEnvironment(
-                        episode,
-                        self.human_proxy,
-                        self.env_tokenizer,
-                        self.rewards_module,
-                        self.purpose_text,
-                        render_mode='human'
-                    )
+            state, _ = env.reset()
 
-                    state, _ = env.reset()
+            for time_step in count():
+                state_tokens = self.state_tokenizer(
+                    state, truncation=True,
+                    return_tensors='pt'
+                )
 
-                    for time_step in count():
-                        state_tokens = self.state_tokenizer(
-                            state, truncation=True,
-                            return_tensors='pt'
-                        )
+                action_tokens, _, _ = \
+                    self.dialog_agent.get_action_and_values(state_tokens)
 
-                        action_tokens, _, _ = \
-                            self.dialog_agent.get_action_and_values(state_tokens)
+                action = self.action_tokenizer.batch_decode(
+                    action_tokens, skip_special_tokens=True)[0]
 
-                        action = self.action_tokenizer.batch_decode(
-                            action_tokens, skip_special_tokens=True)[0]
+                state, reward, terminated, truncated, _ = env.step(action)
 
-                        state, reward, terminated, truncated, _ = env.step(action)
+                self.rewards.append(reward)
 
-                        self.rewards.append(reward)
+                done = terminated or truncated
+                episode_reward += reward
 
-                        done = terminated or truncated
-                        episode_reward += reward
+                self.terminate.append(done)
 
-                        self.terminate.append(done)
-
-                        if done:
-                            self.episode_durations.append(time_step)
-                            self.episode_durations.append(episode_reward/time_step)
-                            break
+                if done:
+                    self.episode_durations.append(time_step)
+                    self.episode_durations.append(episode_reward/time_step)
+                    break
 
     def plot(self, mode='Training'):
         import matplotlib.pyplot as plt
