@@ -141,7 +141,7 @@ class PPOTrainer(object):
 
                         if done:
                             self.episode_durations.append(time_step)
-                            self.episode_durations.append(episode_reward)
+                            self.episode_rewards.append(episode_reward/time_step)
                             break
 
                 # Update once per step
@@ -276,5 +276,25 @@ class PPOTrainer(object):
 
                         if done:
                             self.episode_durations.append(time_step)
-                            self.episode_durations.append(episode_reward)
+                            self.episode_durations.append(episode_reward/time_step)
                             break
+
+    def plot(self, mode='Training'):
+        import matplotlib.pyplot as plt
+
+        plt.rcParams["figure.figsize"] = (30,14)
+        plt.rcParams["font.size"] = 22
+
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+
+        ax1.set_xlabel(f'{mode} Conversations')
+        ax1.set_ylabel('Running Duration (Turns)')
+        ax1.plot(self.episode_durations, linewidth=6, label='Per Episode', color='#0077b6')
+        ax1.legend()
+        ax1.grid(True)
+
+        ax2.set_xlabel(f'{mode} Conversations')
+        ax2.set_ylabel('Epiosde Avg Reward (reward/turn)')
+        ax2.plot(self.episode_durations, linewidth=6, label='Running Average', color='#420c09')
+        ax2.legend()
+        ax2.grid(True)
