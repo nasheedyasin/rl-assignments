@@ -1,248 +1,280 @@
-import gymnasium as gym
-import math
-import random
-import matplotlib
-import matplotlib.pyplot as plt
-from collections import namedtuple, deque
-from itertools import count
-from gymnasium import Env
-
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from torch.distributions import Categorical
-import numpy as np
+import random
+import gymnasium as gym
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+from itertools import count
+from tqdm import tqdm, trange
+from convokit import Corpus
+from accelerate import Accelerator
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-reward_in_episodes=[]
-running_average = 0
+from typing import Optional
 
-class ActorNetwork(nn.Module):
-    def __init__(self, inp_dim, out_dim):
-        super(ActorNetwork, self).__init__()
-        self.fc1 = nn.Linear(inp_dim, 64)
-        self.fc2 = nn.Linear(64, 64)
-        self.fc3 = nn.Linear(64, out_dim)
+from modelling import DialogAgent
+from rewards import PersuasionRewards
+from environment import PersuasionEnvironment
 
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        result = F.softmax(self.fc3(x), dim=-1)
-        dist = Categorical(result)
-        action = dist.sample()
-        log_prob = dist.log_prob(action)
-        return action,log_prob,dist
-    
-class CriticNetwork(nn.Module):
-    def __init__(self, inp_dim, out_dim):      
-        super(CriticNetwork, self).__init__()
-        self.fc1 = nn.Linear(inp_dim, 64)
-        self.fc2 = nn.Linear(64, 64)
-        self.fc3 = nn.Linear(64, out_dim)
 
-    def forward(self, x):
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        result = self.fc3(x)
-        return  result
+class PPOTrainer(object):
+    def __init__(
+        self, 
+        data_path: str,
+        mpath: str,
+        gamma: float,
+        rewards_module: PersuasionRewards,
+        num_epochs: int, # Number of times to run through all episodes
+        batch_size: int = 16, # Episodes in a batch
+        mini_batch_size: int = 1,
+        human_proxy_path: Optional[str] = None,
+        purpose_text: str = "Convince people to donate to charities.",
+        enable_cuda: bool = True
+    ):
+        # Check if CUDA is enabled
+        if enable_cuda and torch.cuda.is_available(): self.device = 'cuda'
+        else: 'cpu'
 
-class QLearningTrainer(object):
-    def __init__(self, env: Env,num:int,gamma:float,batchsize:int,updatesize:int):
-        self.env = env
-        self.num_episodes = num
         self.gamma = gamma
-        
+        self.num_epochs = num_epochs
+        self.purpose_text = purpose_text
+        self.rewards_module = rewards_module
+        self.mini_batch_size = mini_batch_size
+
+        self.episode_durations = []
+        self.episode_rewards = []
         self.rewards = []
         self.log_probs = []
         self.values = []
-        self.action=[]
-        self.states=[]
+        self.action = []
+        self.states = []
+        self.true_states = [] 
         self.terminate = []
-        self.batchsize = batchsize
-        self.updatesize= updatesize
-        self.eps_clip=0.2
-        self.maxtime = 500
-        self.interval = 4* self.maxtime
+        self.batch_size = batch_size
+        self.eps_clip=0.2 
+
+        # Init the data
+        corpus = Corpus(data_path)
+        self.episodes = [conv for conv in corpus.iter_conversations()]
+
+        # Setup the tokenizers
+        self.env_tokenizer = AutoTokenizer.from_pretrained(
+            human_proxy_path if human_proxy_path is not None else mpath
+        )
+        self.env_tokenizer.padding_side = 'left'
+        self.env_tokenizer.truncation_side = 'left'        
+        self.state_tokenizer = AutoTokenizer.from_pretrained(mpath)
+        self.state_tokenizer.padding_side = 'left'
+        self.state_tokenizer.truncation_side = 'left'
+        self.action_tokenizer = AutoTokenizer.from_pretrained(mpath)
+
+        # Init the model
+        self.human_proxy = AutoModelForCausalLM.from_pretrained(
+            human_proxy_path if human_proxy_path is not None else mpath
+        ).to(self.device)
+        self.dialog_agent = DialogAgent(mpath).to(self.device)
+
+        # Setup Optimization
+        self.optimizer = self.dialog_agent.configure_optimizers()['optimizer']
 
     def train(self):
-
-        global_time = 0
+        epoch_iterator = trange(self.num_epochs, desc='Training Epoch:')
         
-        for i in range(self.num_episodes):
-            env = self.env
-            state, info = env.reset()
-            done = False
-            cumm=0
-            step =0
+        for epoch in epoch_iterator:
+            # Shuffle the episodes
+            random.shuffle(self.episodes)
+            step_iterator = trange(
+                start=0,
+                stop=len(self.episodes),
+                step=self.batch_size,
+                desc='Training Step:',
+                leave=False
+            )
 
-            # if((i>0)):
-            #     self.updateA2C()
+            for step in step_iterator:
+                step_episodes = self.episodes[step: step+self.batch_size]
+                for episode in step_episodes:
+                    episode_reward = 0
+                    env = PersuasionEnvironment(
+                        episode,
+                        self.human_proxy,
+                        self.env_tokenizer,
+                        self.rewards_module,
+                        self.purpose_text,
+                        render_mode='human'
+                    )
 
-            #     self.rewards = []
-            #     self.log_probs = []
-            #     self.values = []
-            #     self.states=[]
-            #     self.action=[]
-            #     self.terminate=[]
+                    state, info = env.reset()
+                    true_state = info['true_state']
 
-            while ((not done) and (step < self.maxtime)):
-                state = torch.from_numpy(state).float().unsqueeze(0).to(device)
-                self.states.append(state) 
-                action,log_prob,_ = modelActor(state)
-                value = modelCritic(state)
-                state, reward, terminated, truncated, _ = env.step(action.item())
-                self.log_probs.append(log_prob)
-                self.values.append(value)
-                self.rewards.append(reward)
-                self.action.append(action)
+                    for time_step in count():
+                        self.states.append(state)
+                        self.true_states.append(true_state)
+                        state_tokens = self.state_tokenizer(
+                            state, truncation=True,
+                            return_tensors='pt'
+                        )
+                        true_state_tokens = self.state_tokenizer(
+                            true_state, truncation=True,
+                            return_tensors='pt'
+                        )
 
+                        action_tokens, log_prob, _ = \
+                            self.dialog_agent.get_action_and_values(state_tokens)
+                        value = self.dialog_agent.get_values(true_state_tokens)
 
+                        self.log_probs.append(log_prob) # 1-D Tensor
+                        self.values.append(value) # 0-D Tensor
 
-                done = terminated or truncated
-                cumm+= reward
-                step+=1
-                global_time+=1
+                        action = self.action_tokenizer.batch_decode(
+                            action_tokens, skip_special_tokens=True)[0]
 
-                self.terminate.append(done)
+                        self.action.append(action)
 
-                modFlag = (global_time % self.interval)
+                        state, reward, terminated, truncated, info = env.step(action)
+                        true_state = info['true_state']
 
+                        self.rewards.append(reward)
 
-                if((modFlag ==0) & (i>0)):
-                    self.update()
+                        done = terminated or truncated
+                        episode_reward += reward
 
-                    self.rewards = []
-                    self.log_probs = []
-                    self.values = []
-                    self.states=[]
-                    self.action=[]
-                    self.terminate=[]
+                        self.terminate.append(done)
 
+                        if done:
+                            self.episode_durations.append(time_step)
+                            self.episode_durations.append(episode_reward)
+                            break
 
+                # Update once per step
+                self.update()
 
-
-            reward_in_episodes.append(cumm)
-            if((i)>100):
-                running_average=np.mean(reward_in_episodes[-100:])
-            else: 
-                running_average=0
-
-            if i % 50 == 0:
-                print(f"Episode {i},Rewards {cumm},mean {running_average}")
-            if (running_average > 480):
-                break
-        
+                self.rewards = []
+                self.log_probs = []
+                self.values = []
+                self.states = []
+                self.true_states = []
+                self.action = []
+                self.terminate = []
 
     def update(self):
-            
-            policy_loss = []
-            value_loss = []
-            n_steps = len(self.rewards)
-            QvalueMC = torch.empty(n_steps, dtype=torch.float).to(device)
+        policy_loss = []
+        value_loss = []
+        n_time_steps = len(self.rewards)
+        # Accumulate gradients over the batch
+        accelerator = Accelerator(gradient_accumulation_steps=n_time_steps)
 
-            Qvalue=0
-            for j in reversed(range(n_steps)):
-                if self.terminate[j]:
-                    Qvalue=0
-                Qvalue = self.rewards[j] + self.gamma * Qvalue
-                QvalueMC[j] = Qvalue
-            mean_ = torch.mean((QvalueMC))
-            std_ = torch.std(QvalueMC)
-            if (std_!=0):
-                QvalueMC = (QvalueMC-mean_)/(std_)
-            values = torch.stack(self.values).squeeze()
-            log_probs_old = torch.stack(self.log_probs).squeeze()
-            advantage = QvalueMC - values
-            states= torch.stack(self.states).squeeze()
-            actions= torch.stack(self.action).squeeze()
-            
+        q_values = torch.empty(n_time_steps, dtype=torch.float).to(self.device)
 
-            for j in range(self.updatesize):
-                _,_,dist = modelActor(states)
-                log_prob=dist.log_prob(actions)
-                value = modelCritic(states)
-                state_values = torch.squeeze(value) 
-                dist_entropy = dist.entropy()               
-                ratios = torch.exp(log_prob - log_probs_old.detach())
-                surr1 = ratios * advantage.detach()
-                surr2 = torch.clamp(ratios, 1-self.eps_clip, 1+self.eps_clip) * advantage.detach()              
-                policy_loss = torch.sum((-torch.min(surr1, surr2)) - 0.0*dist_entropy )
-                criterion = nn.MSELoss()
+        # Calculate GAE based Advantage
+        value_t_p_1 = 0 # Since we always ensure completed episodes
+        for t in reversed(range(n_time_steps)):
+            if self.terminate[t]: value_t_p_1 = 0
 
-                value_loss = criterion(state_values, QvalueMC)
-                optimizerActor.zero_grad()
-                optimizerCritic.zero_grad()
+            q_value = self.rewards[t] + self.gamma * value_t_p_1
+            q_values[t] = q_value
+            # The value for time step t+1
+            value_t_p_1 = self.values[t]
 
-                #policy_loss = torch.sum(torch.stack(policy_loss))
-                value_loss.backward()
-                optimizerCritic.step()
+        values = torch.stack(self.values)
+        advantage = q_values - values
+
+        # Normalizing advantage for stability
+        mean_ = torch.mean(advantage)
+        std_ = torch.std(advantage)
+        advantage = (advantage-mean_) / (std_ + 1e-5)
+
+        log_probs_old = torch.cat(self.log_probs)
+
+        for mini_step in range(0, n_time_steps, self.mini_batch_size):
+            minib_state_tokens = self.state_tokenizer(
+                self.states[mini_step: self.mini_batch_size],
+                 padding=True, truncation=True, return_tensors='pt'
+            )
+            minib_true_state_tokens = self.state_tokenizer(
+                self.true_states[mini_step: self.mini_batch_size],
+                 padding=True, truncation=True, return_tensors='pt'
+            )
+            minib_action_tokens = self.state_tokenizer(
+                self.action[mini_step: self.mini_batch_size],
+                padding=True, truncation=True, return_tensors='pt'
+            )
+            minib_advantage = advantage[mini_step: self.mini_batch_size]
+            minib_log_probs_old = log_probs_old[mini_step: self.mini_batch_size]
+
+            with accelerator.accumulate(self.dialog_agent):
+                minib_log_probs = self.dialog_agent.get_log_probs(
+                    minib_state_tokens,
+                    minib_action_tokens
+                )
+                minib_values = self.dialog_agent.get_values(minib_true_state_tokens)
+
+                # Taking this ratio as an approximation to KLdivergence
+                ratios = (minib_log_probs-minib_log_probs_old.detach()).exp()
+
+                surr1 = ratios * minib_advantage.detach()
+                surr2 = torch.clamp(ratios, 1-self.eps_clip, 1+self.eps_clip) \
+                    * minib_advantage.detach()
+
+                policy_loss = -torch.min(surr1, surr2).sum()
+
+                criterion = torch.nn.SmoothL1Loss()
+                value_loss = criterion(minib_values, q_values)
+
+                self.optimizer.zero_grad()
                 policy_loss.backward()
-                optimizerActor.step()
+                value_loss.backward()
+                self.optimizer.step()
 
+    def evaluate(self):
+        epoch_iterator = trange(self.num_epochs, desc='Evaluation Epoch:')
+        
+        for epoch in epoch_iterator:
+            # Shuffle the episodes
+            random.shuffle(self.episodes)
+            step_iterator = trange(
+                start=0,
+                stop=len(self.episodes),
+                step=self.batch_size,
+                desc='Training Step:',
+                leave=False
+            )
 
-    def updateA2C(self):
-            
-            policy_loss = []
-            value_loss = []
-            n_steps = len(self.rewards)
-            QvalueMC = torch.empty(n_steps, dtype=torch.float).to(device)
-            Qvalue = 0
-            for j in reversed(range(n_steps)):
-                Qvalue = self.rewards[j] + self.gamma * Qvalue
-                QvalueMC[j] = Qvalue
+            for step in step_iterator:
+                step_episodes = self.episodes[step: step+self.batch_size]
+                for episode in step_episodes:
+                    episode_reward = 0
+                    env = PersuasionEnvironment(
+                        episode,
+                        self.human_proxy,
+                        self.env_tokenizer,
+                        self.rewards_module,
+                        self.purpose_text,
+                        render_mode='human'
+                    )
 
+                    state, _ = env.reset()
 
-            mean_ = torch.mean((QvalueMC))
-            std_ = torch.std(QvalueMC)
-            if (std_!=0):
-                QvalueMC = (QvalueMC-mean_)/(std_)
+                    for time_step in count():
+                        state_tokens = self.state_tokenizer(
+                            state, truncation=True,
+                            return_tensors='pt'
+                        )
 
+                        action_tokens, _, _ = \
+                            self.dialog_agent.get_action_and_values(state_tokens)
 
+                        action = self.action_tokenizer.batch_decode(
+                            action_tokens, skip_special_tokens=True)[0]
 
-            values = torch.stack(self.values).squeeze()
-            log_probs = torch.stack(self.log_probs).squeeze()
-            advantage = QvalueMC - values
-            
-            policy_loss = torch.sum(-log_probs * advantage.detach())
+                        state, reward, terminated, truncated, _ = env.step(action)
 
-            # Critic loss
-            criterion = nn.MSELoss()
-            value_loss = criterion(values, QvalueMC)
+                        self.rewards.append(reward)
 
-            optimizerActor.zero_grad()
-            optimizerCritic.zero_grad()
+                        done = terminated or truncated
+                        episode_reward += reward
 
-            #policy_loss = torch.sum(torch.stack(policy_loss))
-            value_loss.backward()
-            optimizerCritic.step()
-            policy_loss.backward()
-            optimizerActor.step()
+                        self.terminate.append(done)
 
-
-
-
-env = gym.make("LunarLander-v2")
-reward_in_episodes=[]
-modelActor = ActorNetwork(env.observation_space.shape[0], env.action_space.n).to(device)
-optimizerActor = optim.Adam(modelActor.parameters(), lr=0.001)
-modelCritic = CriticNetwork(env.observation_space.shape[0],1).to(device)
-optimizerCritic = optim.Adam(modelCritic.parameters(), lr=0.001)
-
-
-trainer = QLearningTrainer(env,2000,0.98,4,40)
-gamma = 0.98
-trainer.train()
-
-
-plt.plot(reward_in_episodes)
-durations_t = torch.tensor(reward_in_episodes, dtype=torch.float).to(device)
-means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
-means = torch.cat((torch.zeros(99).to(device), means))
-plt.plot(means.cpu().numpy(), label='Running Average Duration', linewidth=2)
-plt.xlabel('Number of episodes')
-plt.ylabel('Rewards Per epidose')
-plt.legend(['Every Episode','Running Average 100 episodes '])
-plt.title('Training CartPole A2C')
-plt.show()
+                        if done:
+                            self.episode_durations.append(time_step)
+                            self.episode_durations.append(episode_reward)
+                            break
