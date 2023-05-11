@@ -1,5 +1,5 @@
 transformers
-gymnasium[box2d]
+gymnasium
 scipy
 opencv-python
 torchmetrics
